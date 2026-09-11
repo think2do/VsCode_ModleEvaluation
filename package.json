@@ -1,8 +1,8 @@
 {
   "name": "multi-model-compare",
   "displayName": "多模型对比对话",
-  "description": "在独立面板里把同一个问题同时发给多个大模型，并排对比流式回答，支持多轮追问、图片输入与本地历史。",
-  "version": "0.2.0",
+  "description": "在独立面板里把同一个问题同时发给多个大模型，流式对比它们的回答，支持多轮追问、图片输入与本地历史。",
+  "version": "0.7.0",
   "publisher": "local",
   "private": true,
   "license": "MIT",
@@ -45,17 +45,17 @@
           "default": [
             "customendpoint"
           ],
-          "markdownDescription": "你的模型所在的 vendor，默认对应你在 `chatLanguageModels.json` 里配置的自定义端点。配合 `onlyPreferredVendors` 决定模型列表的可见范围与默认勾选。"
+          "markdownDescription": "默认只显示这些来源（vendor）下的模型。默认值 `customendpoint` 就是你自己在 `chatLanguageModels.json` 里添加的模型。留空数组表示不按来源过滤。"
         },
         "multiModelCompare.onlyPreferredVendors": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "只显示 `preferredVendors` 下的模型，隐藏 Copilot 自带的那些。开启时界面顶部会勾选「只看我的模型」，可随时临时切换查看全部模型。"
+          "markdownDescription": "只显示 `multiModelCompare.preferredVendors` 白名单里的模型（默认＝你自己添加的那几个）。关闭后列出全部可用模型，包括 Copilot 自带的。"
         },
         "multiModelCompare.maxSelectedModels": {
           "type": "number",
           "default": 8,
-          "markdownDescription": "默认勾选的模型数量上限，防止一次提问并发打到过多模型（费用 / 速率限制）。设为 `0` 表示不限制。"
+          "markdownDescription": "默认勾选参与提问的模型数量上限，防止一次提问并发打到过多模型（费用 / 速率限制）。设为 `0` 表示不限制。"
         }
       }
     }

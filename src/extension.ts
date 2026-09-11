@@ -27,10 +27,14 @@ export function activate(context: vscode.ExtensionContext): void {
 		}),
 	);
 
-	// 设置变化（包含界面上那个「只看我的模型」开关）时重新筛选模型
+	// 模型范围 / 勾选上限等设置变了，重新计算可见模型与默认勾选
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration((event) => {
-			if (event.affectsConfiguration('multiModelCompare')) {
+			if (
+				event.affectsConfiguration('multiModelCompare.preferredVendors') ||
+				event.affectsConfiguration('multiModelCompare.onlyPreferredVendors') ||
+				event.affectsConfiguration('multiModelCompare.maxSelectedModels')
+			) {
 				void MultiModelChatPanel.current?.refreshModels();
 			}
 		}),

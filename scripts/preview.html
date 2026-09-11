@@ -41,6 +41,17 @@
 		--vscode-editor-font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 		--vscode-editor-font-size: 12px;
 		--vscode-testing-iconPassed: #73c991;
+		--vscode-scrollbarSlider-background: rgba(121, 121, 121, 0.4);
+		--vscode-scrollbarSlider-hoverBackground: rgba(100, 100, 100, 0.7);
+		--vscode-scrollbarSlider-activeBackground: rgba(191, 191, 191, 0.4);
+		--vscode-descriptionForeground: #9d9d9d;
+		--vscode-sideBar-background: #252526;
+		--vscode-charts-blue: #3794ff;
+		--vscode-charts-purple: #b180d7;
+		--vscode-charts-orange: #d18616;
+		--vscode-charts-green: #89d185;
+		--vscode-charts-red: #f14c4c;
+		--vscode-charts-yellow: #cca700;
 	}
 </style>
 </head>
@@ -57,25 +68,15 @@
 		</div>
 	</header>
 
-	<div id="resultbar" class="hidden">
-		<span class="modelbar-label">显示结果</span>
-		<div id="resultToggles" class="models"></div>
-		<button id="showAllResults" class="btn tiny hidden">全部显示</button>
-	</div>
-
-	<div id="modelbar">
-		<span class="modelbar-label">参与对比</span>
-		<div id="models" class="models"></div>
-		<label class="only-mine" title="只显示 preferredVendors 下配置的模型">
-			<input type="checkbox" id="onlyPreferred" />
-			<span>只看我的模型</span>
-		</label>
-	</div>
-
 	<div id="notice" class="notice"></div>
 
 	<div id="body">
-		<main id="messages" class="messages"></main>
+		<div class="main-col">
+			<aside id="strip" class="strip hidden">
+				<div id="stripList" class="strip-list"></div>
+			</aside>
+			<main id="messages" class="messages"></main>
+		</div>
 		<aside id="history" class="history">
 			<div class="history-head">历史会话</div>
 			<ul id="sessionList" class="session-list"></ul>
@@ -85,7 +86,7 @@
 	<footer id="composer">
 		<div id="attachments" class="attachments"></div>
 		<div class="composer-row">
-			<textarea id="input" rows="3" placeholder="输入问题…（回车发送，Shift+回车换行；可粘贴或拖入图片）"></textarea>
+			<textarea id="input" rows="1" placeholder="输入问题…（回车发送，Shift+回车换行；可粘贴或拖入图片）"></textarea>
 			<div class="composer-actions">
 				<button id="send" class="btn primary" disabled>发送</button>
 				<button id="stop" class="btn danger" disabled>停止</button>

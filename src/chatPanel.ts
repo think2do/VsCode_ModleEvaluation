@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { randomUUID } from 'crypto';
-import { SessionStore, type PanelSettings } from './store';
+import { SessionStore } from './store';
 import type {
 	ImageAttachment,
 	ModelRef,
@@ -116,9 +116,6 @@ export class MultiModelChatPanel {
 	private ready = false;
 	/** 面板已关闭。关闭后任何 postMessage 都会抛错，必须拦住。 */
 	private disposed = false;
-	/** 面板设置（卡片宽度等），从 globalStorage 读取 */
-	private settings: PanelSettings = {};
-	private readonly settingsReady: Promise<void>;
 
 	public static createOrShow(context: vscode.ExtensionContext, store: SessionStore): MultiModelChatPanel {
 		const column = vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One;
@@ -147,9 +144,6 @@ export class MultiModelChatPanel {
 		private readonly context: vscode.ExtensionContext,
 		private readonly store: SessionStore,
 	) {
-		this.settingsReady = this.store.loadSettings().then((loaded) => {
-			this.settings = loaded;
-		});
 		this.panel.webview.html = this.buildHtml();
 		this.panel.webview.onDidReceiveMessage(
 			(message: unknown) => void this.onMessage(message as { type?: string }),
@@ -176,18 +170,20 @@ export class MultiModelChatPanel {
 	}
 
 	/** 读取与模型筛选相关的设置。 */
-	private getFilterConfig(): { vendors: string[]; cap: number; onlyPreferred: boolean } {
+	private getFilterConfig(): { cap: number; vendors: string[]; onlyPreferred: boolean } {
 		const config = vscode.workspace.getConfiguration('multiModelCompare');
+		const raw = config.get<string[]>('preferredVendors') ?? [];
 		return {
-			vendors: (config.get<string[]>('preferredVendors') ?? [])
-				.map((v) => v.trim().toLowerCase())
-				.filter(Boolean),
 			cap: config.get<number>('maxSelectedModels') ?? 0,
+			// vendor 比较统一转小写，避免大小写差异导致过滤落空
+			vendors: raw
+				.map((vendor) => String(vendor).trim().toLowerCase())
+				.filter((vendor) => vendor.length > 0),
 			onlyPreferred: config.get<boolean>('onlyPreferredVendors') ?? true,
 		};
 	}
 
-	/** 模型集合或筛选设置发生变化时刷新界面。 */
+	/** 模型集合发生变化时刷新界面。 */
 	public async refreshModels(): Promise<void> {
 		let all: vscode.LanguageModelChat[] = [];
 		const notes: string[] = [];
@@ -198,26 +194,37 @@ export class MultiModelChatPanel {
 			notes.push(`读取模型列表失败：${errText(err)}`);
 		}
 
-		const { vendors, cap, onlyPreferred } = this.getFilterConfig();
+		const { cap, vendors, onlyPreferred } = this.getFilterConfig();
 		const refs = all.map(toModelRef);
 
-		// 开启「只看我的模型」时，只保留 preferredVendors 下的模型。
-		// 若过滤后一个不剩，则回退为全部可见，避免用户面对一个空列表不知道怎么办。
+		// 默认只列出「你自己添加的模型」——即 chatLanguageModels.json 里的自定义端点
+		// （vendor = customendpoint）。Copilot 自带的那十几个默认不列、不勾选。
+		// 若白名单一个都没匹配上，宁可退回显示全部并明确提示，也不要让界面变成空的。
 		let visible = refs;
-		let fellBack = false;
 		if (onlyPreferred && vendors.length > 0) {
-			const filtered = refs.filter((r) => vendors.includes(r.vendor.toLowerCase()));
-			if (filtered.length > 0) {
-				visible = filtered;
-			} else if (refs.length > 0) {
-				fellBack = true;
+			const wanted = new Set(vendors);
+			const kept = refs.filter((ref) => wanted.has(ref.vendor.toLowerCase()));
+			if (kept.length > 0) {
+				visible = kept;
+				if (kept.length < refs.length) {
+					notes.push(
+						`只显示你自己添加的 ${kept.length} 个模型（vendor: ${vendors.join('、')}），` +
+							`另有 ${refs.length - kept.length} 个模型已隐藏。` +
+							'想连它们一起看，把设置 multiModelCompare.onlyPreferredVendors 关掉。',
+					);
+				}
+			} else {
+				notes.push(
+					`设置 multiModelCompare.preferredVendors（${vendors.join('、')}）没有匹配到任何模型，` +
+						'本次临时显示全部可用模型。',
+				);
 			}
 		}
 
 		// this.models 必须与界面上看到的模型严格一致，
 		// 否则 handleSend 里计算出的 targets 会与用户所见不符。
-		const visibleKeys = new Set(visible.map((r) => r.key));
-		this.models = all.filter((m) => visibleKeys.has(keyOf(m)));
+		const shown = new Set(visible.map((ref) => ref.key));
+		this.models = all.filter((model) => shown.has(keyOf(model)));
 
 		if (visible.length === 0) {
 			notes.push(
@@ -225,29 +232,13 @@ export class MultiModelChatPanel {
 					'并在命令面板执行「管理语言模型 / Manage Language Models」检查自定义端点是否可用。',
 			);
 		} else {
-			if (fellBack) {
-				// 常见的首次使用场景：用户没配 preferredVendors 指定的端点。
-				// 此时复选框仍是勾选状态却显示了全部模型，必须解释清楚，否则看起来很矛盾。
-				notes.push(
-					`「只看我的模型」按 multiModelCompare.preferredVendors（${vendors.join('、')}）` +
-						`找不到任何模型，已暂时显示全部 ${refs.length} 个可用模型。` +
-						'想默认只看某个来源的模型，请把该设置改成对应的 vendor 名。',
-				);
-			}
 			notes.push(...this.reconcileSelection(visible, cap));
-			if (visible.length < refs.length) {
-				notes.push(
-					`已隐藏 ${refs.length - visible.length} 个其它来源的模型；` +
-						'需要时取消勾选「只看我的模型」即可查看全部。',
-				);
-			}
 		}
 
 		this.post({
 			type: 'models',
 			models: visible,
 			selected: this.session.selectedModels,
-			onlyPreferred,
 			warning: notes.join('\n'),
 		});
 	}
@@ -295,16 +286,6 @@ export class MultiModelChatPanel {
 				break;
 			case 'requestSessions':
 				await this.sendSessions();
-				break;
-			case 'setOnlyPreferred':
-				await this.handleSetOnlyPreferred(
-					(message as unknown as { value?: boolean }).value === true,
-				);
-				break;
-			case 'saveWidths':
-				await this.handleSaveWidths(
-					(message as unknown as { widths?: Record<string, number> }).widths ?? {},
-				);
 				break;
 			case 'openLink':
 				await this.handleOpenLink((message as unknown as { href?: string }).href);
@@ -358,22 +339,6 @@ export class MultiModelChatPanel {
 		}
 	}
 
-	/** 记住用户拖拽过的卡片宽度（全局，不限会话）。 */
-	private async handleSaveWidths(widths: Record<string, number>): Promise<void> {
-		await this.settingsReady;
-
-		const clean: Record<string, number> = {};
-		for (const [key, value] of Object.entries(widths)) {
-			if (typeof key === 'string' && key && typeof value === 'number' && Number.isFinite(value)) {
-				// 夹到合理区间，避免脏数据把布局搞坏
-				clean[key] = Math.max(160, Math.min(1600, Math.round(value)));
-			}
-		}
-
-		this.settings = { ...this.settings, cardWidths: clean };
-		await this.store.saveSettings(this.settings);
-	}
-
 	/** 用系统默认浏览器打开回答里的链接（webview 自己开不了）。 */
 	private async handleOpenLink(href: unknown): Promise<void> {
 		if (typeof href !== 'string') {
@@ -384,19 +349,6 @@ export class MultiModelChatPanel {
 			return;
 		}
 		await vscode.env.openExternal(vscode.Uri.parse(href));
-	}
-
-	/**
-	 * 切换「只看我的模型」。
-	 *
-	 * 写入用户设置（Global），因此会持久化，也方便用户在设置界面里改。
-	 * 写完后由 extension.ts 里的 onDidChangeConfiguration 监听触发刷新，
-	 * 保证「界面开关」与「设置项」始终是同一个数据源。
-	 */
-	private async handleSetOnlyPreferred(value: boolean): Promise<void> {
-		await vscode.workspace
-			.getConfiguration('multiModelCompare')
-			.update('onlyPreferredVendors', value, vscode.ConfigurationTarget.Global);
 	}
 
 	private async handleSelectModels(selected: string[]): Promise<void> {
@@ -708,13 +660,11 @@ export class MultiModelChatPanel {
 	}
 
 	private async postSession(): Promise<void> {
-		await this.settingsReady;
 		this.sessionSummaries = await this.store.list();
 		this.post({
 			type: 'session',
 			session: await this.toWireSession(this.session),
 			sessions: this.sessionSummaries,
-			cardWidths: this.settings.cardWidths ?? {},
 		});
 	}
 
@@ -833,25 +783,15 @@ export class MultiModelChatPanel {
 			</div>
 		</header>
 
-		<div id="resultbar" class="hidden">
-			<span class="modelbar-label">显示结果</span>
-			<div id="resultToggles" class="models"></div>
-			<button id="showAllResults" class="btn tiny hidden">全部显示</button>
-		</div>
-
-		<div id="modelbar">
-			<span class="modelbar-label">参与对比</span>
-			<div id="models" class="models"></div>
-			<label class="only-mine" title="只显示 preferredVendors 下你配置的模型。\n取消勾选可查看全部可用模型（Copilot 自带的也会列出来）。">
-				<input type="checkbox" id="onlyPreferred" />
-				<span>只看我的模型</span>
-			</label>
-		</div>
-
 		<div id="notice" class="notice"></div>
 
 		<div id="body">
-			<main id="messages" class="messages"></main>
+			<div class="main-col">
+				<aside id="strip" class="strip hidden">
+					<div id="stripList" class="strip-list"></div>
+				</aside>
+				<main id="messages" class="messages"></main>
+			</div>
 			<aside id="history" class="history">
 				<div class="history-head">历史会话</div>
 				<ul id="sessionList" class="session-list"></ul>
@@ -861,7 +801,7 @@ export class MultiModelChatPanel {
 		<footer id="composer">
 			<div id="attachments" class="attachments"></div>
 			<div class="composer-row">
-				<textarea id="input" rows="3" placeholder="输入问题…（回车发送，Shift+回车换行；可粘贴或拖入图片）"></textarea>
+				<textarea id="input" rows="1" placeholder="输入问题…（回车发送，Shift+回车换行；可粘贴或拖入图片）"></textarea>
 				<div class="composer-actions">
 					<button id="send" class="btn primary" disabled>发送</button>
 					<button id="stop" class="btn danger" disabled>停止</button>

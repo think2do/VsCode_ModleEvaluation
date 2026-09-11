@@ -13,29 +13,20 @@ const MIME_EXT: Record<string, string> = {
 	'image/bmp': 'bmp',
 };
 
-/** 面板级设置（与具体会话无关，全局生效）。 */
-export interface PanelSettings {
-	/** 模型 key -> 卡片宽度（px） */
-	cardWidths?: Record<string, number>;
-}
-
 /**
  * 会话与图片的本地持久化。
  *
  * 目录结构（位于扩展的 globalStorageUri 下）：
  * ```
- * settings.json                面板设置（卡片宽度等）
  * sessions/<sessionId>.json    每个会话一个文件
  * images/<uuid>.<ext>          图片二进制，由会话文件按文件名引用
  * ```
  */
 export class SessionStore {
-	private readonly rootDir: string;
 	private readonly sessionsDir: string;
 	private readonly imagesDir: string;
 
 	constructor(root: vscode.Uri) {
-		this.rootDir = root.fsPath;
 		this.sessionsDir = path.join(root.fsPath, 'sessions');
 		this.imagesDir = path.join(root.fsPath, 'images');
 	}
@@ -107,26 +98,6 @@ export class SessionStore {
 		const target = this.sessionFile(session.id);
 		const tmp = `${target}.tmp`;
 		await fs.promises.writeFile(tmp, JSON.stringify(session, null, 2), 'utf8');
-		await fs.promises.rename(tmp, target);
-	}
-
-	/** 读取面板设置；文件不存在或损坏时返回空对象。 */
-	async loadSettings(): Promise<PanelSettings> {
-		try {
-			const raw = await fs.promises.readFile(path.join(this.rootDir, 'settings.json'), 'utf8');
-			const parsed = JSON.parse(raw) as PanelSettings;
-			return parsed && typeof parsed === 'object' ? parsed : {};
-		} catch {
-			return {};
-		}
-	}
-
-	/** 写入面板设置（原子写入）。 */
-	async saveSettings(settings: PanelSettings): Promise<void> {
-		await fs.promises.mkdir(this.rootDir, { recursive: true });
-		const target = path.join(this.rootDir, 'settings.json');
-		const tmp = `${target}.tmp`;
-		await fs.promises.writeFile(tmp, JSON.stringify(settings, null, 2), 'utf8');
 		await fs.promises.rename(tmp, target);
 	}
 
