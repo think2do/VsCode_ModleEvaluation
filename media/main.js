@@ -473,11 +473,21 @@
 		copy.title = '复制这条回答（保持 Markdown 原文）';
 		copy.disabled = true;
 
+		const regenerate = document.createElement('button');
+		regenerate.className = 'card-copy card-regenerate';
+		regenerate.type = 'button';
+		regenerate.textContent = '重新生成';
+		regenerate.title = '重新生成这条回答';
+		regenerate.addEventListener('click', () => {
+			vscode.postMessage({ type: 'regenerate', turnId, key });
+		});
+
 		const status = document.createElement('span');
 		status.className = 'card-status';
 
 		head.appendChild(name);
 		head.appendChild(copy);
+		head.appendChild(regenerate);
 		head.appendChild(status);
 		card.appendChild(head);
 
@@ -506,6 +516,7 @@
 			body,
 			copy,
 			status,
+			regenerate,
 			text: (response && response.text) || '',
 			res: response || { status: 'pending', text: '' },
 			timer: 0,
@@ -535,6 +546,8 @@
 
 		// 没有内容就没什么可复制的
 		entry.copy.disabled = !entry.text;
+		const latestTurn = state.session.turns && state.session.turns[state.session.turns.length - 1];
+		entry.regenerate.hidden = !latestTurn || latestTurn.id !== entry.turnId || res.status === 'streaming' || res.status === 'pending';
 
 		let hint = entry.card.querySelector('.card-hint');
 		if (res.droppedImages) {

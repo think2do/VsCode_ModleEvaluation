@@ -275,6 +275,12 @@ export class MultiModelChatPanel {
 			case 'stop':
 				this.stopAll();
 				break;
+			case 'regenerate':
+				await this.handleRegenerate(
+					(message as unknown as { turnId?: string; key?: string }).turnId,
+					(message as unknown as { turnId?: string; key?: string }).key,
+				);
+				break;
 			case 'newSession':
 				await this.newSession();
 				break;
@@ -448,6 +454,33 @@ export class MultiModelChatPanel {
 		await this.store.save(this.session);
 		await this.sendSessions();
 		this.post({ type: 'idle' });
+	}
+
+	private async handleRegenerate(turnId: string | undefined, key: string | undefined): Promise<void> {
+		if (!turnId || !key || this.running.has(key)) {
+			return;
+		}
+		const turnIndex = this.session.turns.findIndex((turn) => turn.id === turnId);
+		if (turnIndex < 0 || turnIndex !== this.session.turns.length - 1) {
+			return;
+		}
+		const turn = this.session.turns[turnIndex];
+		const model = this.models.find((candidate) => keyOf(candidate) === key);
+		if (!model || !turn.responses[key]) {
+			return;
+		}
+		const response = turn.responses[key];
+		response.text = '';
+		response.status = 'pending';
+		delete response.error;
+		delete response.elapsedMs;
+		delete response.droppedImages;
+		this.post({ type: 'reset', turnId, key });
+		await this.store.save(this.session);
+		await this.runModel(turn, model);
+		this.session.updatedAt = Date.now();
+		await this.store.save(this.session);
+		await this.sendSessions();
 	}
 
 	private async runModel(turn: Turn, model: vscode.LanguageModelChat): Promise<void> {
