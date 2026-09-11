@@ -1,0 +1,77 @@
+{
+  "name": "multi-model-compare",
+  "displayName": "多模型对比对话",
+  "description": "在独立面板里把同一个问题同时发给多个大模型，并排对比流式回答，支持多轮追问、图片输入与本地历史。",
+  "version": "0.2.0",
+  "publisher": "local",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.137.0"
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      {
+        "command": "multiModelCompare.open",
+        "title": "打开对比对话面板",
+        "category": "多模型对比"
+      },
+      {
+        "command": "multiModelCompare.newSession",
+        "title": "新建会话",
+        "category": "多模型对比"
+      },
+      {
+        "command": "multiModelCompare.toggleHistory",
+        "title": "显示 / 隐藏历史会话",
+        "category": "多模型对比"
+      }
+    ],
+    "configuration": {
+      "title": "多模型对比对话",
+      "properties": {
+        "multiModelCompare.preferredVendors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "customendpoint"
+          ],
+          "markdownDescription": "你的模型所在的 vendor，默认对应你在 `chatLanguageModels.json` 里配置的自定义端点。配合 `onlyPreferredVendors` 决定模型列表的可见范围与默认勾选。"
+        },
+        "multiModelCompare.onlyPreferredVendors": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "只显示 `preferredVendors` 下的模型，隐藏 Copilot 自带的那些。开启时界面顶部会勾选「只看我的模型」，可随时临时切换查看全部模型。"
+        },
+        "multiModelCompare.maxSelectedModels": {
+          "type": "number",
+          "default": 8,
+          "markdownDescription": "默认勾选的模型数量上限，防止一次提问并发打到过多模型（费用 / 速率限制）。设为 `0` 表示不限制。"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "node scripts/smoke-render.mjs",
+    "install:local": "npm run compile && node scripts/install-local.mjs",
+    "uninstall:local": "node scripts/install-local.mjs --uninstall",
+    "package:vsix": "npm run compile && node scripts/package-vsix.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.137.0",
+    "typescript": "^5.0.0"
+  }
+}

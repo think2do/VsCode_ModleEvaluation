@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>多模型对比对话 · 界面预览</title>
+<!--
+  开发用预览页：在普通浏览器里加载真实的 media/style.css + markdown.js + main.js，
+  用 mock 的 acquireVsCodeApi 模拟扩展侧消息，用来验证布局、Markdown 渲染、
+  拖拽宽度、复制按钮等界面行为（无需启动 VS Code）。
+
+  注意：这里只复刻 HTML 骨架，样式与逻辑都引用真实文件，改样式请改 media/style.css。
+-->
+<link href="../media/style.css" rel="stylesheet" />
+<style>
+	/* 模拟 VS Code 深色主题变量，让预览更接近真实观感 */
+	:root {
+		--vscode-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+		--vscode-font-size: 13px;
+		--vscode-foreground: #cccccc;
+		--vscode-editor-background: #1e1e1e;
+		--vscode-panel-border: rgba(128, 128, 128, 0.35);
+		--vscode-button-background: #0e639c;
+		--vscode-button-foreground: #ffffff;
+		--vscode-button-hoverBackground: #1177bb;
+		--vscode-button-secondaryBackground: rgba(128, 128, 128, 0.2);
+		--vscode-button-secondaryHoverBackground: rgba(128, 128, 128, 0.3);
+		--vscode-input-background: #3c3c3c;
+		--vscode-input-foreground: #cccccc;
+		--vscode-input-border: rgba(128, 128, 128, 0.4);
+		--vscode-focusBorder: #007fd4;
+		--vscode-errorForeground: #f48771;
+		--vscode-textLink-foreground: #3794ff;
+		--vscode-editorWidget-background: rgba(128, 128, 128, 0.06);
+		--vscode-sideBarSectionHeader-background: rgba(128, 128, 128, 0.1);
+		--vscode-textCodeBlock-background: rgba(0, 0, 0, 0.3);
+		--vscode-textBlockQuote-background: rgba(128, 128, 128, 0.1);
+		--vscode-textBlockQuote-border: rgba(128, 128, 128, 0.5);
+		--vscode-list-hoverBackground: rgba(128, 128, 128, 0.12);
+		--vscode-list-activeSelectionBackground: rgba(128, 128, 128, 0.25);
+		--vscode-progressBar-background: #0e70c0;
+		--vscode-editor-font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+		--vscode-editor-font-size: 12px;
+		--vscode-testing-iconPassed: #73c991;
+	}
+</style>
+</head>
+<body>
+<div id="app">
+	<header id="toolbar">
+		<div class="tb-left">
+			<span class="app-title">多模型对比对话</span>
+			<span id="session-title" class="session-badge"></span>
+		</div>
+		<div class="tb-right">
+			<button id="newSession" class="btn">新建会话</button>
+			<button id="toggleHistory" class="btn">历史</button>
+		</div>
+	</header>
+
+	<div id="resultbar" class="hidden">
+		<span class="modelbar-label">显示结果</span>
+		<div id="resultToggles" class="models"></div>
+		<button id="showAllResults" class="btn tiny hidden">全部显示</button>
+	</div>
+
+	<div id="modelbar">
+		<span class="modelbar-label">参与对比</span>
+		<div id="models" class="models"></div>
+		<label class="only-mine" title="只显示 preferredVendors 下配置的模型">
+			<input type="checkbox" id="onlyPreferred" />
+			<span>只看我的模型</span>
+		</label>
+	</div>
+
+	<div id="notice" class="notice"></div>
+
+	<div id="body">
+		<main id="messages" class="messages"></main>
+		<aside id="history" class="history">
+			<div class="history-head">历史会话</div>
+			<ul id="sessionList" class="session-list"></ul>
+		</aside>
+	</div>
+
+	<footer id="composer">
+		<div id="attachments" class="attachments"></div>
+		<div class="composer-row">
+			<textarea id="input" rows="3" placeholder="输入问题…（回车发送，Shift+回车换行；可粘贴或拖入图片）"></textarea>
+			<div class="composer-actions">
+				<button id="send" class="btn primary" disabled>发送</button>
+				<button id="stop" class="btn danger" disabled>停止</button>
+			</div>
+		</div>
+	</footer>
+</div>
+
+<script>
+	// 模拟 VS Code 的 webview API，把前端发出的消息记到 window.__sent 供检查
+	window.acquireVsCodeApi = function () {
+		return {
+			postMessage: (message) => {
+				window.__sent = window.__sent || [];
+				window.__sent.push(message);
+			},
+			getState: () => ({}),
+			setState: () => {},
+		};
+	};
+
+	// 模拟扩展侧下发消息
+	window.__emit = function (message) {
+		window.dispatchEvent(new MessageEvent('message', { data: message }));
+	};
+</script>
+<script src="../media/markdown.js"></script>
+<script src="../media/main.js"></script>
+</body>
+</html>
