@@ -404,6 +404,10 @@
 
 		const section = document.createElement('section');
 		section.className = 'turn';
+		const turnLabel = document.createElement('div');
+		turnLabel.className = 'turn-label';
+		turnLabel.textContent = '第 ' + ((state.session.turns || []).findIndex((item) => item.id === turn.id) + 1) + ' 轮';
+		section.appendChild(turnLabel);
 
 		// 用户提问
 		const user = document.createElement('div');
@@ -482,12 +486,28 @@
 			vscode.postMessage({ type: 'regenerate', turnId, key });
 		});
 
+		const importOne = document.createElement('button');
+		importOne.className = 'card-copy card-import';
+		importOne.type = 'button';
+		importOne.textContent = '导入单条';
+		importOne.title = '导入这条回答到 Copilot Chat';
+		importOne.addEventListener('click', () => vscode.postMessage({ type: 'importToCopilot', turnId, key, scope: 'one' }));
+
+		const importModel = document.createElement('button');
+		importModel.className = 'card-copy card-import';
+		importModel.type = 'button';
+		importModel.textContent = '导入本组';
+		importModel.title = '导入该模型在本会话中的全部对话到 Copilot Chat';
+		importModel.addEventListener('click', () => vscode.postMessage({ type: 'importToCopilot', turnId, key, scope: 'model' }));
+
 		const status = document.createElement('span');
 		status.className = 'card-status';
 
 		head.appendChild(name);
 		head.appendChild(copy);
 		head.appendChild(regenerate);
+		head.appendChild(importOne);
+		head.appendChild(importModel);
 		head.appendChild(status);
 		card.appendChild(head);
 
@@ -517,6 +537,8 @@
 			copy,
 			status,
 			regenerate,
+			importOne,
+			importModel,
 			text: (response && response.text) || '',
 			res: response || { status: 'pending', text: '' },
 			timer: 0,
@@ -548,6 +570,9 @@
 		entry.copy.disabled = !entry.text;
 		const latestTurn = state.session.turns && state.session.turns[state.session.turns.length - 1];
 		entry.regenerate.hidden = !latestTurn || latestTurn.id !== entry.turnId || res.status === 'streaming' || res.status === 'pending';
+		const importDisabled = !entry.text || res.status === 'streaming' || res.status === 'pending';
+		entry.importOne.disabled = importDisabled;
+		entry.importModel.disabled = importDisabled;
 
 		let hint = entry.card.querySelector('.card-hint');
 		if (res.droppedImages) {

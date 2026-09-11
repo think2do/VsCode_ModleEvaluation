@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>方案 4 · 磁贴工作台</title>
+<link href="shared.css" rel="stylesheet" />
+<style>
+/*
+  方案 4 —— 磁贴工作台（Bento）
+  思路：让「对比」这件事更有空间感。
+  · 卡片是有厚度感的磁贴，每块带模型色，宽度可拖拽、双击复位
+  · 顶部工具条与底部输入条都做成「浮动小岛」，内容区通铺，视觉更整体
+  · 历史会话做成左侧抽屉，默认收起，需要时滑出（不再长期占宽）
+  适合：想要现代感、喜欢自由调整布局的人。
+*/
+
+.app { display: flex; height: 100vh; }
+
+/* ---------- 薄图标栏 ---------- */
+.rail {
+	width: 44px; flex: 0 0 auto;
+	background: var(--bg); border-right: 1px solid var(--border);
+	display: flex; flex-direction: column; align-items: center;
+	gap: 4px; padding: 10px 0;
+}
+
+.rail-logo {
+	width: 24px; height: 24px; border-radius: 7px;
+	background: linear-gradient(140deg, var(--m3), var(--m2));
+	color: #fff; font-size: 11px; font-weight: 700;
+	display: flex; align-items: center; justify-content: center;
+	margin-bottom: 8px;
+}
+
+.rail-btn {
+	width: 30px; height: 30px; border: none; border-radius: 8px;
+	background: transparent; color: var(--fg-3); cursor: pointer;
+	display: flex; align-items: center; justify-content: center;
+	transition: background 0.12s, color 0.12s;
+}
+
+.rail-btn:hover { background: var(--hover); color: var(--fg); }
+.rail-btn.on { background: var(--accent-soft); color: var(--accent); }
+.rail .spacer { flex: 1 1 auto; }
+
+/* ---------- 舞台 ---------- */
+.stage { flex: 1 1 auto; position: relative; min-width: 0; display: flex; flex-direction: column; }
+
+/* 浮动顶栏 */
+.float-top {
+	position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+	z-index: 20;
+	display: flex; align-items: center; gap: 9px;
+	padding: 6px 8px 6px 12px;
+	background: color-mix(in srgb, var(--bg-1) 92%, transparent);
+	backdrop-filter: blur(12px);
+	border: 1px solid var(--border-2);
+	border-radius: 999px;
+	box-shadow: var(--shadow-2);
+	max-width: min(940px, calc(100% - 32px));
+}
+
+.ft-title {
+	font-weight: 600; max-width: 260px;
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* 参与对比：一排小圆点标签 */
+.pickers { display: flex; align-items: center; gap: 4px; }
+
+.picker {
+	display: flex; align-items: center; gap: 5px;
+	height: 24px; padding: 0 9px; border-radius: 999px;
+	border: 1px solid transparent; background: var(--bg-2);
+	color: var(--fg-3); cursor: pointer; white-space: nowrap;
+	font-size: 0.88em;
+	transition: all 0.12s;
+}
+
+.picker .mdot { width: 7px; height: 7px; border-radius: 50%; background: var(--fg-3); }
+
+.picker:hover { color: var(--fg-2); }
+
+.picker.on {
+	background: color-mix(in srgb, var(--c) 16%, transparent);
+	border-color: color-mix(in srgb, var(--c) 50%, transparent);
+	color: var(--fg);
+}
+
+.picker.on .mdot { background: var(--c); }
+
+/* ---------- 磁贴区 ---------- */
+.tiles {
+	flex: 1 1 auto; overflow: auto;
+	padding: 68px 18px 110px;
+	display: flex; flex-wrap: wrap; gap: 14px;
+	align-content: flex-start;
+	scroll-behavior: smooth;
+}
+
+.tile {
+	position: relative;
+	width: 360px;
+	display: flex; flex-direction: column;
+	background: var(--bg-1);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-lg);
+	box-shadow: var(--shadow-2);
+	overflow: hidden;
+	transition: border-color 0.15s, transform 0.15s;
+}
+
+.tile:hover { border-color: var(--border-2); }
+
+/* 顶部渐变条 + 左上角柔光，制造「厚度」 */
+.tile::before {
+	content: ''; height: 3px;
+	background: linear-gradient(90deg, var(--c), transparent);
+}
+
+.tile::after {
+	content: ''; position: absolute; pointer-events: none;
+	top: 0; left: 0; width: 180px; height: 180px;
+	background: radial-gradient(circle at 0 0, color-mix(in srgb, var(--c) 14%, transparent), transparent 70%);
+}
+
+.tile[data-status='streaming'] { border-color: color-mix(in srgb, var(--c) 45%, var(--border)); }
+.tile[data-status='error'] { border-color: color-mix(in srgb, var(--err) 50%, var(--border)); }
+
+.t-head {
+	display: flex; align-items: center; gap: 8px;
+	padding: 10px 12px 9px; position: relative; z-index: 1;
+}
+
+.t-name { font-weight: 600; display: flex; align-items: center; gap: 7px; min-width: 0; }
+.t-name .mdot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.t-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.t-body {
+	padding: 2px 12px 12px; max-height: 300px; overflow-y: auto;
+	font-size: 0.96em; position: relative; z-index: 1;
+}
+
+.t-foot {
+	border-top: 1px solid var(--border);
+	padding: 7px 12px; display: flex; align-items: center; gap: 8px;
+	font-size: 0.83em; color: var(--fg-3);
+	background: color-mix(in srgb, var(--bg-2) 60%, transparent);
+}
+
+/* 宽度拖拽柄：右侧一条窄带，悬停出现小胶囊提示 */
+.t-resize {
+	position: absolute; top: 0; right: 0; bottom: 0; width: 8px;
+	cursor: col-resize; z-index: 8;
+}
+
+.t-resize::after {
+	content: ''; position: absolute; top: 50%; left: 50%;
+	transform: translate(-50%, -50%);
+	width: 3px; height: 30px; border-radius: 3px;
+	background: var(--c); opacity: 0;
+	transition: opacity 0.12s;
+}
+
+.tile:hover .t-resize::after { opacity: 0.45; }
+.t-resize:hover::after { opacity: 1; }
+body.resizing { cursor: col-resize; user-select: none; }
+
+/* 拖宽时给个宽度角标 */
+.wbadge {
+	position: absolute; top: 8px; right: 12px; z-index: 9;
+	display: none; font-size: 0.76em;
+}
+
+body.resizing .tile .wbadge.dragging { display: inline-flex; }
+
+/* 主模型磁贴更宽，形成 Bento 节奏 */
+.tile.feature { width: 560px; }
+
+/* ---------- 浮动输入岛 ---------- */
+.float-bottom {
+	position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+	z-index: 20; width: min(760px, calc(100% - 36px));
+	background: color-mix(in srgb, var(--bg-1) 94%, transparent);
+	backdrop-filter: blur(14px);
+	border: 1px solid var(--border-2);
+	border-radius: var(--radius-lg);
+	box-shadow: var(--shadow-2);
+	padding: 10px 10px 8px;
+	transition: border-color 0.15s;
+}
+
+.float-bottom:focus-within { border-color: var(--accent); }
+
+.fb-attach { display: flex; gap: 6px; align-items: center; padding: 0 2px 7px; }
+.fb-attach .thumb { width: 40px; height: 40px; border-radius: 7px; }
+
+.float-bottom textarea {
+	width: 100%; border: none; background: transparent; outline: none;
+	resize: none; line-height: 1.65; max-height: 120px;
+}
+
+.fb-bar { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+.fb-hint { font-size: 0.82em; color: var(--fg-3); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+
+/* ---------- 历史抽屉 ---------- */
+.drawer {
+	width: 240px; flex: 0 0 auto;
+	background: var(--bg-1); border-left: 1px solid var(--border);
+	display: flex; flex-direction: column; min-height: 0;
+}
+
+.drawer-head {
+	display: flex; align-items: center; justify-content: space-between;
+	padding: 12px 12px 8px; font-weight: 600; font-size: 0.94em;
+	flex: 0 0 auto;
+}
+
+.drawer-search { padding: 0 10px 8px; flex: 0 0 auto; }
+
+.drawer-list { flex: 1 1 auto; overflow-y: auto; padding: 0 8px 10px; list-style: none; margin: 0; display: flex; flex-direction: column; gap: 3px; }
+
+.ds {
+	display: flex; align-items: center; gap: 8px;
+	padding: 8px 9px; border-radius: var(--radius);
+	background: var(--bg-2); border: 1px solid transparent; cursor: pointer;
+}
+
+.ds:hover { background: var(--bg-3); }
+
+.ds.active {
+	border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+	background: var(--accent-soft);
+}
+
+.ds .cnt {
+	font-size: 0.78em; color: var(--fg-3);
+	background: var(--bg); border-radius: 5px; padding: 1px 5px;
+	flex: 0 0 auto;
+}
+
+.ds-main { flex: 1 1 auto; min-width: 0; }
+.ds-title { font-size: 0.92em; color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds.active .ds-title { color: var(--fg); }
+.ds-time { font-size: 0.78em; color: var(--fg-3); margin-top: 2px; }
+
+/* 窄窗口降级：收起历史抽屉，磁贴自动换行（已经是 flex-wrap） */
+@media (max-width: 1080px) {
+	.drawer { display: none; }
+}
+
+@media (max-width: 900px) {
+	.tile,
+	.tile.feature { width: 100% !important; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+	<!-- 薄图标栏 -->
+	<nav class="rail">
+		<div class="rail-logo">M</div>
+		<button class="rail-btn on" title="磁贴视图"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></button>
+		<button class="rail-btn" title="列表视图"><svg class="i" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></button>
+		<button class="rail-btn" title="导出"><svg class="i" viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4M4 19h16"/></svg></button>
+		<div class="spacer"></div>
+		<button class="rail-btn" id="theme" title="切换深浅色"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></svg></button>
+	</nav>
+
+	<!-- 舞台 -->
+	<div class="stage">
+
+		<!-- 浮动顶栏 -->
+		<div class="float-top">
+			<span class="ft-title">你知道赛博朋克吗？</span>
+			<span class="sep"></span>
+			<div class="pickers">
+				<label class="picker on" style="--c: var(--m1)"><input type="checkbox" checked hidden /><span class="mdot"></span>Sol</label>
+				<label class="picker" style="--c: var(--m2)"><input type="checkbox" hidden /><span class="mdot"></span>Astra</label>
+				<label class="picker on" style="--c: var(--m3)"><input type="checkbox" checked hidden /><span class="mdot"></span>Flash</label>
+				<label class="picker on" style="--c: var(--m4)"><input type="checkbox" checked hidden /><span class="mdot"></span>Pro</label>
+			</div>
+			<span class="sep"></span>
+			<button class="btn tiny ghost" title="新建会话">新建</button>
+			<button class="icon-btn sm" title="全部重新生成"><svg class="i" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg></button>
+		</div>
+
+		<!-- 磁贴 -->
+		<div class="tiles">
+
+			<!-- 主磁贴：V4.1-Flash -->
+			<article class="tile feature" style="--c: var(--m3); width: 460px" data-status="done">
+				<div class="t-resize" title="拖拽调整宽度，双击恢复默认"></div>
+				<div class="wbadge badge mono dragging">460px</div>
+				<div class="t-head">
+					<span class="t-name"><span class="mdot"></span><span>V4.1-Flash</span></span>
+					<span class="badge" title="主模型">主</span>
+					<span class="grow"></span>
+					<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+					<button class="icon-btn sm" title="重新生成"><svg class="i" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg></button>
+				</div>
+				<div class="t-body md">
+					<p><strong>知道。</strong>赛博朋克（Cyberpunk）是科幻的一个分支，核心框架为：</p>
+					<blockquote>High tech, low life —— 高科技，低生活。</blockquote>
+					<p>它通常指一个<strong>技术高度发达、但社会严重分化</strong>的近未来：</p>
+					<ul>
+						<li>巨型企业掌握权力，政府被弱化或腐化</li>
+						<li>人工智能、人体改造、脑机接口、虚拟现实普及</li>
+						<li>黑客、雇佣兵、边缘人在底层挣扎</li>
+						<li>监控、贫富悬殊、身份危机、异化成为常见主题</li>
+					</ul>
+					<p>视觉上常见：霓虹灯、雨夜、贫民窟、摩天楼、东方元素、故障艺术。</p>
+				</div>
+				<div class="t-foot">
+					<span class="status done"><span class="dot done"></span>完成 · 4.8s</span>
+					<span class="grow"></span>
+					<span class="badge mono">1820 字</span>
+				</div>
+			</article>
+
+			<!-- V4-Pro -->
+			<article class="tile" style="--c: var(--m4)" data-status="done">
+				<div class="t-resize" title="拖拽调整宽度，双击恢复默认"></div>
+				<div class="wbadge badge mono dragging">360px</div>
+				<div class="t-head">
+					<span class="t-name"><span class="mdot"></span><span>V4-Pro-0813</span></span>
+					<span class="grow"></span>
+					<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+				</div>
+				<div class="t-body md">
+					<p>如果你是指<strong>赛博朋克和蒸汽朋克</strong>的区别，主要如下：</p>
+					<table>
+						<thead><tr><th>对比项</th><th>蒸汽朋克</th></tr></thead>
+						<tbody>
+							<tr><td>时代背景</td><td>19 世纪维多利亚时代·工业革命</td></tr>
+							<tr><td>核心技术</td><td>蒸汽机、齿轮、差分机</td></tr>
+							<tr><td>视觉风格</td><td>黄铜、皮革、烟囱</td></tr>
+							<tr><td>代表作品</td><td>《差分机》《哈尔的移动城堡》</td></tr>
+						</tbody>
+					</table>
+					<p>简单说：<strong>蒸汽朋克是“过去想象中的未来”</strong>。</p>
+				</div>
+				<div class="t-foot">
+					<span class="status done"><span class="dot done"></span>完成 · 9.1s</span>
+					<span class="grow"></span>
+					<span class="badge mono">640 字</span>
+				</div>
+			</article>
+
+			<!-- Astra 生成中 -->
+			<article class="tile" style="--c: var(--m2)" data-status="streaming">
+				<div class="t-resize" title="拖拽调整宽度，双击恢复默认"></div>
+				<div class="wbadge badge mono dragging">360px</div>
+				<div class="t-head">
+					<span class="t-name"><span class="mdot"></span><span>6-Astra</span></span>
+					<span class="grow"></span>
+					<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+				</div>
+				<div class="t-body md">
+					<div class="notice warn" style="margin-bottom:8px">该模型不支持图片，本次已仅发送文本</div>
+					<p>赛博朋克是一种<strong>反乌托邦式的科幻美学</strong>，它关心的不是机器本身，而是技术权力如何重新分配人的位置<span class="caret"></span></p>
+				</div>
+				<div class="t-foot">
+					<span class="status streaming"><span class="dot streaming"></span>生成中 · 6.2s</span>
+					<span class="grow"></span>
+					<button class="btn tiny danger">停止</button>
+				</div>
+			</article>
+
+			<!-- Sol 失败 -->
+			<article class="tile" style="--c: var(--m1)" data-status="error">
+				<div class="t-resize" title="拖拽调整宽度，双击恢复默认"></div>
+				<div class="wbadge badge mono dragging">360px</div>
+				<div class="t-head">
+					<span class="t-name"><span class="mdot"></span><span>5.6-Sol</span></span>
+					<span class="grow"></span>
+					<button class="icon-btn sm" disabled title="无可复制内容"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+				</div>
+				<div class="t-body">
+					<div class="notice error">该模型暂不可用（NoPermissions）。首次使用时会弹出授权请求，允许后即可；企业策略也可能拦截。</div>
+				</div>
+				<div class="t-foot">
+					<span class="status error"><span class="dot error"></span>失败 · 1.2s</span>
+					<span class="grow"></span>
+					<button class="btn tiny">重试</button>
+				</div>
+			</article>
+
+		</div>
+
+		<!-- 浮动输入岛 -->
+		<div class="float-bottom">
+			<div class="fb-attach">
+				<div class="thumb"></div>
+			</div>
+			<textarea rows="1" placeholder="输入问题…（回车发送，Shift+回车换行；可粘贴或拖入图片）"></textarea>
+			<div class="fb-bar">
+				<div class="fb-hint grow">
+					<span class="badge">3 / 4 参与</span>
+					<span>拖动磁贴右边缘可调宽度</span>
+					<span class="sep"></span>
+					<span>双击恢复默认</span>
+				</div>
+				<button class="btn danger" disabled>停止</button>
+				<button class="btn primary">发送</button>
+			</div>
+		</div>
+	</div>
+
+	<!-- 历史抽屉 -->
+	<aside class="drawer">
+		<div class="drawer-head">
+			<span>历史会话</span>
+			<div class="row" style="gap:2px">
+				<button class="icon-btn sm" title="新建会话"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+				<button class="icon-btn sm" title="收起"><svg class="i" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+			</div>
+		</div>
+		<div class="drawer-search"><input class="field" placeholder="搜索…" /></div>
+		<ul class="drawer-list">
+			<li class="ds active"><span class="cnt">4</span><div class="ds-main"><div class="ds-title">你知道赛博朋克吗？</div><div class="ds-time">09-11 21:23</div></div></li>
+			<li class="ds"><span class="cnt">2</span><div class="ds-main"><div class="ds-title">你好</div><div class="ds-time">09-11 20:48</div></div></li>
+			<li class="ds"><span class="cnt">2</span><div class="ds-main"><div class="ds-title">我准备做一场和 AI 产品经理…</div><div class="ds-time">09-11 21:21</div></div></li>
+			<li class="ds"><span class="cnt">1</span><div class="ds-main"><div class="ds-title">既然“多喝水能改善”已经…</div><div class="ds-time">09-11 21:21</div></div></li>
+			<li class="ds"><span class="cnt">2</span><div class="ds-main"><div class="ds-title">“鲸鱼是鱼类”这个说法对不…</div><div class="ds-time">09-11 20:20</div></div></li>
+		</ul>
+	</aside>
+</div>
+
+<script>
+	document.getElementById('theme').onclick = function () {
+		var r = document.documentElement;
+		r.dataset.theme = r.dataset.theme === 'dark' ? 'light' : 'dark';
+	};
+
+	// 参与对比：点击切换
+	document.querySelectorAll('.picker').forEach(function (p) {
+		p.addEventListener('click', function () { p.classList.toggle('on'); });
+	});
+
+	// 磁贴宽度拖拽（双击恢复默认 360 / 460）
+	document.querySelectorAll('.tile').forEach(function (tile) {
+		var handle = tile.querySelector('.t-resize');
+		var isFeature = tile.classList.contains('feature');
+		var def = isFeature ? 460 : 360;
+		var drag = null;
+
+		handle.addEventListener('pointerdown', function (e) {
+			e.preventDefault();
+			drag = { x: e.clientX, w: tile.getBoundingClientRect().width };
+			document.body.classList.add('resizing');
+			tile.querySelector('.wbadge').classList.add('dragging');
+			handle.setPointerCapture(e.pointerId);
+		});
+
+		handle.addEventListener('pointermove', function (e) {
+			if (!drag) return;
+			var w = Math.max(220, Math.min(1200, Math.round(drag.w + (e.clientX - drag.x))));
+			tile.style.width = w + 'px';
+			tile.querySelector('.wbadge').textContent = w + 'px';
+		});
+
+		handle.addEventListener('pointerup', function () {
+			drag = null;
+			document.body.classList.remove('resizing');
+			tile.querySelector('.wbadge').classList.remove('dragging');
+		});
+
+		// 双击复位
+		handle.addEventListener('dblclick', function () {
+			tile.style.width = def + 'px';
+		});
+	});
+</script>
+</body>
+</html>

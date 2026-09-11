@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>方案 2 · 对齐对比网格</title>
+<link href="shared.css" rel="stylesheet" />
+<style>
+/*
+  方案 2 —— 对齐对比网格
+  思路：把「并排对比」当表格来做。
+  · 每个模型是一列，列头吸顶，滚动时永远知道哪列是谁
+  · 每轮 = 一行，问题横跨整行放在列头下方
+  · 列等宽对齐，读起来可以横向对照，而不是各卡片各排各的
+  · 列表头可直接收起某列（等价原来的「显示结果」）
+  · 列宽可拖，双击恢复
+*/
+
+.app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ---------- 顶栏 ---------- */
+.appbar {
+	display: flex; align-items: center; gap: 10px;
+	padding: 9px 14px;
+	border-bottom: 1px solid var(--border);
+	background: var(--bg-1);
+	flex: 0 0 auto;
+}
+
+.brand { font-weight: 600; display: flex; align-items: center; gap: 8px; }
+
+.brand .mk {
+	width: 20px; height: 20px; border-radius: 6px;
+	background: linear-gradient(140deg, var(--m3), var(--m2));
+	color: #fff; font-size: 11px; font-weight: 700;
+	display: flex; align-items: center; justify-content: center;
+}
+
+/* ---------- 参与提问条 ---------- */
+.pickbar {
+	display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+	padding: 8px 14px;
+	border-bottom: 1px solid var(--border);
+	background: var(--bg);
+	flex: 0 0 auto;
+}
+
+.pickbar .lbl {
+	font-size: 0.8em; color: var(--fg-3);
+	letter-spacing: 0.06em; text-transform: uppercase;
+	margin-right: 2px;
+}
+
+/* ---------- 列头（吸顶） ---------- */
+.colhead {
+	display: grid;
+	grid-template-columns: 68px var(--cols);
+	gap: 0;
+	border-bottom: 1px solid var(--border-2);
+	background: var(--bg-1);
+	flex: 0 0 auto;
+	box-shadow: 0 6px 12px -8px rgba(0, 0, 0, 0.6);
+	z-index: 3;
+}
+
+.ch-corner {
+	font-size: 0.76em; color: var(--fg-3);
+	display: flex; align-items: center; padding-left: 12px;
+	letter-spacing: 0.06em;
+}
+
+.ch {
+	position: relative;
+	padding: 8px 12px 8px 14px;
+	border-left: 1px solid var(--border);
+	min-width: 0;
+	display: flex; flex-direction: column; gap: 4px;
+}
+
+/* 列头顶部一条模型色 */
+.ch::before {
+	content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+	background: var(--c, var(--accent)); opacity: 0.9;
+}
+
+.ch-top { display: flex; align-items: center; gap: 7px; min-width: 0; }
+
+.ch-name {
+	font-weight: 600; font-size: 0.95em;
+	overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.ch-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+
+.ch-foot {
+	display: flex; align-items: center; gap: 8px;
+	font-size: 0.8em; color: var(--fg-3);
+}
+
+.ch.collapsed {
+	opacity: 0.5;
+}
+
+/* 收起整列：压成一根窄条，只留下颜色点与「恢复」按钮 */
+.ch.mini {
+	padding: 8px 4px;
+	align-items: center;
+}
+
+.ch.mini .ch-top {
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+}
+
+.ch.mini .nm,
+.ch.mini .ch-foot,
+.ch.mini .ch-resize,
+.ch.mini .ch-actions button:first-child {
+	display: none;
+}
+
+.ch.mini .ch-actions {
+	margin-left: 0;
+}
+
+.ch.mini .eye {
+	color: var(--fg-3);
+}
+
+/* 列宽拖拽手柄（列头右边缘） */
+.ch-resize {
+	position: absolute; top: 0; right: -3px; bottom: 0; width: 6px;
+	cursor: col-resize; z-index: 6;
+}
+
+.ch-resize::after {
+	content: ''; position: absolute; top: 6px; bottom: 6px; left: 50%;
+	width: 2px; margin-left: -1px; border-radius: 2px;
+	background: var(--accent); opacity: 0;
+	transition: opacity 0.12s;
+}
+
+.ch:hover .ch-resize::after { opacity: 0.5; }
+.ch-resize:hover::after, body.resizing .ch-resize::after { opacity: 1; }
+body.resizing { cursor: col-resize; user-select: none; }
+
+/* ---------- 滚动内容 ---------- */
+.scroller { flex: 1 1 auto; overflow: auto; min-height: 0; }
+
+.turn-block { border-bottom: 1px solid var(--border); }
+
+/* 问题带：横跨整行，左侧轮次号对齐左列 */
+.prompt-row {
+	display: grid;
+	grid-template-columns: 68px minmax(0, 1fr);
+	background: var(--bg-2);
+	border-bottom: 1px solid var(--border);
+}
+
+.pr-no {
+	display: flex; flex-direction: column; align-items: center; justify-content: center;
+	font-size: 0.74em; color: var(--fg-3); gap: 2px;
+	border-right: 1px solid var(--border);
+}
+
+.pr-no b { font-size: 1.25em; color: var(--fg-2); font-weight: 600; }
+
+.pr-body {
+	padding: 10px 14px;
+	display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+
+.pr-text { font-weight: 500; }
+
+.pr-thumbs { display: flex; gap: 5px; }
+.pr-thumbs .thumb { width: 34px; height: 34px; border-radius: 5px; }
+
+/* 回答行：与列头同一套列宽变量，保证严格对齐 */
+.answer-row {
+	display: grid;
+	grid-template-columns: 68px var(--cols);
+}
+
+.cell {
+	border-left: 1px solid var(--border);
+	padding: 12px 14px;
+	min-width: 0;
+	font-size: 0.96em;
+	position: relative;
+	max-height: 340px;
+	overflow-y: auto;
+}
+
+.cell.collapsed { overflow: hidden; padding: 8px; }
+
+/* 收起状态：整列挖空，但仍保留一根窄栏，便于点眼睛恢复 */
+.cell.collapsed .cell-inner { display: none; }
+
+.cell.collapsed::after {
+	content: '';
+	display: block;
+	height: 72px;
+	border: 1px dashed var(--border-2);
+	border-radius: var(--radius-sm);
+}
+
+.cell-gutter { border-right: 1px solid var(--border); }
+
+.cell[data-status='streaming'] { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.cell[data-status='error'] { background: color-mix(in srgb, var(--err) 6%, transparent); }
+.cell[data-status='pending'] { background: color-mix(in srgb, var(--fg-3) 6%, transparent); }
+
+/* 生成中的光标 */
+.caret {
+	display: inline-block; width: 7px; height: 14px;
+	background: var(--accent); vertical-align: text-bottom;
+	animation: blink 1s steps(2) infinite;
+}
+
+@keyframes blink { 50% { opacity: 0; } }
+
+.cell-empty { color: var(--fg-3); font-size: 0.88em; }
+
+/* 每格底部一行小字：状态 + 复制 */
+.cell-bar {
+	display: flex; align-items: center; gap: 6px;
+	margin-top: 8px; padding-top: 7px;
+	border-top: 1px dashed var(--border);
+	font-size: 0.8em; color: var(--fg-3);
+}
+
+/* ---------- 底部输入 ---------- */
+.composer {
+	flex: 0 0 auto;
+	border-top: 1px solid var(--border-2);
+	background: var(--bg-1);
+	padding: 9px 14px 11px;
+	display: flex; flex-direction: column; gap: 7px;
+}
+
+.composer-row { display: flex; align-items: flex-end; gap: 9px; }
+
+.composer textarea {
+	flex: 1 1 auto; border: 1px solid var(--border);
+	border-radius: var(--radius); background: var(--bg);
+	padding: 8px 10px; resize: none; outline: none; line-height: 1.6;
+	max-height: 120px;
+}
+
+.composer textarea:focus { border-color: var(--accent); }
+
+.attach-strip { display: flex; gap: 6px; align-items: center; }
+.attach-strip .thumb { width: 42px; height: 42px; border-radius: 6px; }
+
+.legend-bar {
+	display: flex; align-items: center; gap: 10px;
+	font-size: 0.8em; color: var(--fg-3); flex-wrap: wrap;
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+	<!-- 顶栏 -->
+	<header class="appbar">
+		<div class="brand"><span class="mk">M</span>多模型对比对话</div>
+		<span class="sep"></span>
+		<div class="grow ellipsis muted">你知道赛博朋克吗？</div>
+		<button class="btn tiny">导出 Markdown</button>
+		<button class="btn tiny">历史</button>
+		<button class="btn tiny">新建会话</button>
+	</header>
+
+	<!-- 参与对比（决定发给谁） -->
+	<div class="pickbar">
+		<span class="lbl">参与对比</span>
+		<label class="chip on" style="--c: var(--m1)"><input type="checkbox" checked /><span class="mdot"></span>5.6-Sol</label>
+		<label class="chip off" style="--c: var(--m2)"><input type="checkbox" /><span class="mdot"></span>6-Astra</label>
+		<label class="chip on" style="--c: var(--m3)"><input type="checkbox" checked /><span class="mdot"></span>V4.1-Flash</label>
+		<label class="chip on" style="--c: var(--m4)"><input type="checkbox" checked /><span class="mdot"></span>V4-Pro-0813</label>
+		<span class="grow"></span>
+		<label class="row muted" style="font-size:0.88em"><input type="checkbox" checked /> 只看我的模型</label>
+	</div>
+
+	<!-- 列头：吸顶，和下面的格子共用 --cols 列宽定义 -->
+	<div class="colhead" id="colhead" style="--cols: repeat(4, minmax(220px, 1fr))">
+		<div class="ch-corner">轮次</div>
+
+		<div class="ch" style="--c: var(--m1)" data-col="1">
+			<div class="ch-resize"></div>
+			<div class="ch-top">
+				<span class="dot error"></span>
+				<span class="ch-name">5.6-Sol</span>
+				<span class="ch-actions">
+					<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+					<button class="icon-btn sm eye" title="隐藏该列"><svg class="i" viewBox="0 0 24 24"><path d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></button>
+				</span>
+			</div>
+			<div class="ch-foot"><span class="badge">共 2 轮</span><span>平均 3.4s</span></div>
+		</div>
+
+		<div class="ch" style="--c: var(--m2)" data-col="2">
+			<div class="ch-resize"></div>
+			<div class="ch-top">
+				<span class="dot done"></span>
+				<span class="ch-name">6-Astra</span>
+				<span class="ch-actions">
+					<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+					<button class="icon-btn sm eye" title="隐藏该列"><svg class="i" viewBox="0 0 24 24"><path d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></button>
+				</span>
+			</div>
+			<div class="ch-foot"><span class="badge">共 2 轮</span><span>平均 5.0s</span></div>
+		</div>
+
+		<div class="ch" style="--c: var(--m3)" data-col="3">
+			<div class="ch-resize"></div>
+			<div class="ch-top">
+				<span class="dot streaming"></span>
+				<span class="ch-name">V4.1-Flash</span>
+				<span class="ch-actions">
+					<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+					<button class="icon-btn sm eye" title="隐藏该列"><svg class="i" viewBox="0 0 24 24"><path d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></button>
+				</span>
+			</div>
+			<div class="ch-foot"><span class="badge">生成中 3/4</span><span>4.8s</span></div>
+		</div>
+
+		<div class="ch" style="--c: var(--m4)" data-col="4">
+			<div class="ch-resize"></div>
+			<div class="ch-top">
+				<span class="dot done"></span>
+				<span class="ch-name">V4-Pro-0813</span>
+				<span class="ch-actions">
+					<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+					<button class="icon-btn sm eye" title="隐藏该列"><svg class="i" viewBox="0 0 24 24"><path d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></button>
+				</span>
+			</div>
+			<div class="ch-foot"><span class="badge">共 2 轮</span><span>平均 7.2s</span></div>
+		</div>
+	</div>
+
+	<!-- 内容 -->
+	<div class="scroller">
+
+		<!-- 第 1 轮 -->
+		<section class="turn-block">
+			<div class="prompt-row">
+				<div class="pr-no"><b>1</b><span>21:23</span></div>
+				<div class="pr-body">
+					<span class="pr-text">你知道赛博朋克吗？</span>
+					<span class="grow"></span>
+					<span class="badge">4 个模型 · 最慢 9.1s</span>
+				</div>
+			</div>
+
+			<div class="answer-row" data-row="1" style="--cols: repeat(4, minmax(220px, 1fr))">
+				<div class="cell-gutter"></div>
+
+				<!-- Sol 失败 -->
+				<div class="cell" style="--c: var(--m1)" data-status="error">
+					<div class="cell-inner">
+						<div class="notice error">该模型暂不可用（NoPermissions）。首次使用时会弹出授权请求，允许后即可；企业策略也可能拦截。</div>
+					</div>
+					<div class="cell-bar">
+						<span class="status error"><span class="dot error"></span>失败 · 1.2s</span>
+						<span class="grow"></span>
+						<button class="btn tiny">重试</button>
+					</div>
+				</div>
+
+				<!-- Astra 生成中 -->
+				<div class="cell" style="--c: var(--m2)" data-status="streaming">
+					<div class="cell-inner md">
+						<p>赛博朋克是一种<strong>反乌托邦式的科幻美学</strong>，它关心的不是机器本身，而是技术权力如何重新分配人的位置……</p>
+						<p>核心矛盾通常写成三层：</p>
+						<ul>
+							<li>技术层：AI、义体、脑机接口无处不在</li>
+							<li>权力层：巨型企业取代政府成为实际统治者</li>
+							<li>个体层：人在高度连接中反而被异化、被监控</li>
+						</ul>
+						<p><span class="caret"></span></p>
+					</div>
+					<div class="cell-bar">
+						<span class="status streaming"><span class="dot streaming"></span>生成中 · 6.2s</span>
+						<span class="grow"></span>
+						<button class="btn tiny danger">停止</button>
+					</div>
+				</div>
+
+				<!-- Flash 完成 -->
+				<div class="cell" style="--c: var(--m3)" data-status="done">
+					<div class="cell-inner md">
+						<p><strong>知道。</strong>赛博朋克（Cyberpunk）是科幻的一个分支，核心框架为：</p>
+						<blockquote>High tech, low life —— 高科技，低生活。</blockquote>
+						<p>它通常指一个<strong>技术高度发达、但社会严重分化</strong>的近未来：</p>
+						<ul>
+							<li>巨型企业掌握权力，政府被弱化或腐化</li>
+							<li>人工智能、人体改造、脑机接口、虚拟现实普及</li>
+							<li>黑客、雇佣兵、边缘人在底层挣扎</li>
+						</ul>
+						<p>视觉上常见：霓虹灯、雨夜、贫民窟、摩天楼、东方元素、故障艺术。</p>
+					</div>
+					<div class="cell-bar">
+						<span class="status done"><span class="dot done"></span>完成 · 4.8s</span>
+						<span class="grow"></span>
+						<span class="badge mono">1820 字</span>
+						<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+					</div>
+				</div>
+
+				<!-- Pro 完成 -->
+				<div class="cell" style="--c: var(--m4)" data-status="done">
+					<div class="cell-inner md">
+						<table>
+							<thead><tr><th>对比项</th><th>蒸汽朋克</th><th>赛博朋克</th></tr></thead>
+							<tbody>
+								<tr><td>时代背景</td><td>19 世纪工业革命</td><td>近未来·反乌托邦</td></tr>
+								<tr><td>核心技术</td><td>蒸汽机、齿轮、差分机</td><td>信息技术、AI、义体</td></tr>
+								<tr><td>社会主题</td><td>探索、发明、浪漫冒险</td><td>监控、异化、阶级压迫</td></tr>
+								<tr><td>视觉风格</td><td>黄铜、皮革、烟囱</td><td>霓虹、雨夜、全息广告</td></tr>
+							</tbody>
+						</table>
+					</div>
+					<div class="cell-bar">
+						<span class="status done"><span class="dot done"></span>完成 · 9.1s</span>
+						<span class="grow"></span>
+						<span class="badge mono">640 字</span>
+						<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<!-- 第 2 轮 -->
+		<section class="turn-block">
+			<div class="prompt-row">
+				<div class="pr-no"><b>2</b><span>21:26</span></div>
+				<div class="pr-body">
+					<span class="pr-text">和蒸汽朋克有啥区别？</span>
+					<span class="grow"></span>
+					<span class="badge">3 个模型 · 最慢 9.1s</span>
+				</div>
+			</div>
+
+			<div class="answer-row" data-row="2" style="--cols: repeat(4, minmax(220px, 1fr))">
+				<div class="cell-gutter"></div>
+
+				<!-- 第 4 列被「显示结果」隐藏，但结构保留 -->
+				<div class="cell collapsed" style="--c: var(--m1)" data-col="1">
+					<div class="cell-inner"></div>
+				</div>
+
+				<div class="cell" style="--c: var(--m2)" data-status="done">
+					<div class="cell-inner md">
+						<div class="notice warn" style="margin-bottom:8px">该模型不支持图片，本次已仅发送文本</div>
+						<p>两者都是「复古未来主义」，但<strong>想象的时态不同</strong>：蒸汽朋克向后看，赛博朋克向前看。</p>
+					</div>
+					<div class="cell-bar">
+						<span class="status done"><span class="dot done"></span>完成 · 5.4s</span>
+						<span class="grow"></span>
+						<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+					</div>
+				</div>
+
+				<div class="cell" style="--c: var(--m3)" data-status="done">
+					<div class="cell-inner md">
+						<p><strong>一句话概括：</strong></p>
+						<ul>
+							<li>赛博朋克：近未来的高科技、低生活、反乌托邦。</li>
+							<li>蒸汽朋克：架空的 19 世纪过去，用蒸汽和齿轮想象另一种现代性。</li>
+						</ul>
+						<p>下面是七个维度的对照：</p>
+						<table>
+							<thead><tr><th>维度</th><th>蒸汽朋克</th><th>赛博朋克</th></tr></thead>
+							<tbody>
+								<tr><td>技术基础</td><td>蒸汽机、齿轮、发条</td><td>网络、AI、义体</td></tr>
+								<tr><td>视觉风格</td><td>黄铜、皮革</td><td>霓虹、雨夜、全息</td></tr>
+								<tr><td>权力结构</td><td>帝国、贵族、殖民</td><td>巨型企业、寡头</td></tr>
+							</tbody>
+						</table>
+					</div>
+					<div class="cell-bar">
+						<span class="status done"><span class="dot done"></span>完成 · 9.1s</span>
+						<span class="grow"></span>
+						<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+					</div>
+				</div>
+
+				<div class="cell" style="--c: var(--m4)" data-status="pending">
+					<div class="cell-inner md">
+						<p class="cell-empty">已排队，尚未开始生成……</p>
+					</div>
+					<div class="cell-bar">
+						<span class="status"><span class="dot pending"></span>等待中</span>
+					</div>
+				</div>
+			</div>
+		</section>
+
+	</div>
+
+	<!-- 底部输入 -->
+	<footer class="composer">
+		<div class="attach-strip">
+			<div class="thumb"></div>
+			<div class="thumb" style="background:linear-gradient(135deg,#3a4a2b,#6b5a35)"></div>
+			<button class="btn tiny ghost">清除附件</button>
+		</div>
+		<div class="composer-row">
+			<textarea rows="2" placeholder="输入问题…（回车发送，Shift+回车换行；可粘贴或拖入图片）"></textarea>
+			<div style="display:flex;flex-direction:column;gap:6px">
+				<button class="btn primary">发送</button>
+				<button class="btn danger">停止</button>
+			</div>
+		</div>
+		<div class="legend-bar">
+			<span>列宽可拖拽，双击手柄恢复默认</span>
+			<span class="sep"></span>
+			<span>点列头右上的眼睛可收起整列（等价「显示结果」）</span>
+			<span class="grow"></span>
+			<span>4 列 · 20 次请求</span>
+		</div>
+	</footer>
+</div>
+
+<script>
+	// 深浅色
+	document.querySelector('.appbar').addEventListener('dblclick', function () {
+		var r = document.documentElement;
+		r.dataset.theme = r.dataset.theme === 'dark' ? 'light' : 'dark';
+	});
+
+	// 模型勾选：联动 chip 外观
+	document.querySelectorAll('.chip input').forEach(function (box) {
+		box.addEventListener('change', function () {
+			box.closest('.chip').classList.toggle('on', box.checked);
+			box.closest('.chip').classList.toggle('off', !box.checked);
+		});
+	});
+
+	// ---------- 列显隐 + 列宽拖拽（共用一套列宽数据，保证表头与内容严格对齐） ----------
+	var DEFAULT_W = 260;
+	var MINI_W = 44;
+	var COL_COUNT = 4;
+	var hiddenCols = new Set();
+	var widths = [];
+	for (var i = 0; i < COL_COUNT; i++) widths.push(DEFAULT_W);
+
+	/** 把列宽数组写成 grid-template-columns，隐藏的列压成窄条（而不是删掉，避免列错位） */
+	function applyWidths() {
+		var cols = '';
+		for (var i = 0; i < COL_COUNT; i++) {
+			cols += (i ? ' ' : '') + (hiddenCols.has(i + 1) ? MINI_W : widths[i]) + 'px';
+		}
+		document.getElementById('colhead').style.setProperty('--cols', cols);
+		document.querySelectorAll('.answer-row').forEach(function (row) {
+			row.style.setProperty('--cols', cols);
+		});
+
+		// 同步视觉：列头压成窄条、单元格变成「已隐藏」占位
+		document.querySelectorAll('.ch').forEach(function (ch) {
+			ch.classList.toggle('mini', hiddenCols.has(Number(ch.dataset.col)));
+		});
+		document.querySelectorAll('.cell[data-col]').forEach(function (cell) {
+			cell.classList.toggle('collapsed', hiddenCols.has(Number(cell.dataset.col)));
+		});
+	}
+
+	document.querySelectorAll('.ch .eye').forEach(function (eye) {
+		eye.addEventListener('click', function (e) {
+			e.stopPropagation();
+			var n = Number(eye.closest('.ch').dataset.col);
+			if (hiddenCols.has(n)) hiddenCols.delete(n);
+			else hiddenCols.add(n);
+			applyWidths();
+		});
+	});
+
+	document.querySelectorAll('.ch-resize').forEach(function (h) {
+		h.addEventListener('pointerdown', function (e) {
+			e.preventDefault();
+			var n = Number(h.closest('.ch').dataset.col);
+			drag = { n: n, startX: e.clientX, startW: widths[n - 1] };
+			document.body.classList.add('resizing');
+			try { h.setPointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
+		});
+
+		// 双击手柄：该列恢复默认宽度
+		h.addEventListener('dblclick', function (e) {
+			e.stopPropagation();
+			var n = Number(h.closest('.ch').dataset.col);
+			widths[n - 1] = DEFAULT_W;
+			hiddenCols.delete(n);
+			applyWidths();
+		});
+	});
+
+	var drag = null;
+
+	document.addEventListener('pointermove', function (e) {
+		if (!drag) return;
+		widths[drag.n - 1] = Math.max(150, drag.startW + Math.round(e.clientX - drag.startX));
+		applyWidths();
+	});
+
+	document.addEventListener('pointerup', function () {
+		if (!drag) return;
+		document.body.classList.remove('resizing');
+		drag = null;
+	});
+
+	applyWidths();
+</script>
+</body>
+</html>

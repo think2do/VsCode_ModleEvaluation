@@ -309,8 +309,52 @@ export class MultiModelChatPanel {
 			case 'openLink':
 				await this.handleOpenLink((message as unknown as { href?: string }).href);
 				break;
+			case 'importToCopilot':
+				await this.handleImportToCopilot(
+					message as unknown as { turnId?: string; key?: string; scope?: string },
+				);
+				break;
 			default:
 				break;
+		}
+	}
+
+	private async handleImportToCopilot(message: { turnId?: string; key?: string; scope?: string }): Promise<void> {
+		const key = message.key;
+		if (!key) {
+			return;
+		}
+		const model = this.models.find((candidate) => keyOf(candidate) === key);
+		const modelName = model?.name ?? key;
+		const turns = this.session.turns.filter((turn) =>
+			turn.responses[key] && (message.scope === 'model' || turn.id === message.turnId),
+		);
+		if (turns.length === 0) {
+			return;
+		}
+		const content = turns.map((turn) => {
+			const response = turn.responses[key];
+			const turnNumber = this.session.turns.findIndex((item) => item.id === turn.id) + 1;
+			const heading = message.scope === 'model' ? '' : `## 第 ${turnNumber} 轮\n\n`;
+			return `${heading}### 用户\n\n${turn.prompt || '(图片消息)'}\n\n### ${modelName}\n\n${response.text || '(无文本回复)'}`;
+		}).join('\n\n---\n\n');
+		const query = `以下是多模型对比会话中 ${modelName} 的${message.scope === 'model' ? '完整对话' : '单条回复及其提问'}，请作为后续讨论的上下文。\n\n${content}`;
+		const workspace = vscode.workspace.workspaceFolders?.[0];
+		const safe = (value: string): string => value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'model';
+		const turnNumber = this.session.turns.findIndex((turn) => turn.id === message.turnId) + 1;
+		const fileName = `${safe(this.session.title)}-${safe(modelName)}-${message.scope === 'model' ? '完整对话' : `第${turnNumber}轮`}.md`;
+		const dir = workspace ? vscode.Uri.joinPath(workspace.uri, '.multi-model-context') : vscode.Uri.joinPath(this.context.globalStorageUri, 'contexts');
+		const file = vscode.Uri.joinPath(dir, fileName);
+		const fileText = `# ${modelName} 对话上下文\n\n${content}\n`;
+		try {
+			await vscode.workspace.fs.createDirectory(dir);
+			await vscode.workspace.fs.writeFile(file, Buffer.from(fileText, 'utf8'));
+			await vscode.window.showTextDocument(file, { preview: false });
+			await vscode.env.clipboard.writeText(workspace ? `#${vscode.workspace.asRelativePath(file)}` : file.fsPath);
+			void vscode.window.showInformationMessage('上下文文件已打开，文件引用已复制。请在 Copilot Chat 中粘贴引用。');
+		} catch (err) {
+			await vscode.env.clipboard.writeText(query);
+			void vscode.window.showWarningMessage(`上下文文件创建失败，完整内容已复制到剪贴板。${errText(err)}`);
 		}
 	}
 

@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>方案 5 · 紧凑对比表</title>
+<link href="shared.css" rel="stylesheet" />
+<style>
+/*
+  方案 5 —— 紧凑对比表（高信息密度）
+  思路：解决「模型多 / 会话长」时的可读性。
+  · 一张表铺开所有轮次与所有模型，行=轮次，列=模型
+  · 左侧「问题列」固定，横向滚动时问题始终可见
+  · 每格默认截断为若干行，点一下展开；密度可在工具栏切换
+  · 字号更小、间距更紧，一屏能看 8 个模型 × 多轮
+  适合：模型多、只想快速扫一眼差异、需要回看历史轮次。
+*/
+
+.app { display: flex; flex-direction: column; height: 100vh; font-size: 12.5px; }
+
+/* ---------- 极简单行工具栏 ---------- */
+.bar {
+	display: flex; align-items: center; gap: 8px;
+	height: 38px; padding: 0 10px;
+	background: var(--bg-1); border-bottom: 1px solid var(--border);
+	flex: 0 0 auto;
+}
+
+.bar .mk {
+	width: 18px; height: 18px; border-radius: 5px;
+	background: linear-gradient(140deg, var(--m3), var(--m2));
+	color: #fff; font-size: 10px; font-weight: 700;
+	display: flex; align-items: center; justify-content: center;
+}
+
+.bar-title { font-weight: 600; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 模型开关做成极小的方块按钮，省空间 */
+.mbtn {
+	display: inline-flex; align-items: center; gap: 4px;
+	height: 22px; padding: 0 7px; border-radius: 5px;
+	border: 1px solid var(--border); background: var(--bg-2);
+	color: var(--fg-3); cursor: pointer; white-space: nowrap;
+	font-size: 0.9em;
+	transition: all 0.12s;
+}
+
+.mbtn .mdot { width: 6px; height: 6px; border-radius: 50%; background: var(--fg-3); }
+.mbtn:hover { color: var(--fg-2); }
+.mbtn.on {
+	border-color: color-mix(in srgb, var(--c) 55%, transparent);
+	background: color-mix(in srgb, var(--c) 14%, transparent);
+	color: var(--fg);
+}
+.mbtn.on .mdot { background: var(--c); }
+
+.density {
+	display: inline-flex; gap: 2px; padding: 2px;
+	background: var(--bg-2); border-radius: 6px; border: 1px solid var(--border);
+}
+
+.density button {
+	border: none; background: transparent; color: var(--fg-3);
+	height: 18px; padding: 0 7px; border-radius: 4px; cursor: pointer; font-size: 0.86em;
+}
+
+.density button.on { background: var(--bg-1); color: var(--fg); }
+
+/* ---------- 表格 ---------- */
+.table-wrap { flex: 1 1 auto; overflow: auto; min-height: 0; }
+
+table.grid {
+	border-collapse: separate;
+	border-spacing: 0;
+	width: max-content;
+	min-width: 100%;
+}
+
+/* 表头吸顶 */
+thead th {
+	position: sticky; top: 0; z-index: 5;
+	background: var(--bg-1);
+	border-bottom: 1px solid var(--border-2);
+	padding: 0;
+	text-align: left;
+	vertical-align: top;
+}
+
+/* 左上角固定单元格：同时吸顶 + 吸左 */
+th.corner {
+	left: 0; z-index: 7;
+	background: var(--bg-1);
+	border-right: 1px solid var(--border-2);
+	width: 168px; min-width: 168px;
+	padding: 8px 10px;
+	font-size: 0.8em; color: var(--fg-3);
+	letter-spacing: 0.05em;
+}
+
+th.col {
+	min-width: 210px; width: 210px;
+	border-right: 1px solid var(--border);
+	position: sticky;
+}
+
+.ch-in { padding: 7px 10px 7px 11px; position: relative; display: flex; flex-direction: column; gap: 3px; }
+
+.ch-in::before {
+	content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+	background: var(--c); opacity: 0.9;
+}
+
+.ch-title { display: flex; align-items: center; gap: 6px; }
+.ch-title .nm { font-weight: 600; font-size: 0.95em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-title .acts { margin-left: auto; display: flex; gap: 1px; }
+.ch-sub { font-size: 0.8em; color: var(--fg-3); display: flex; align-items: center; gap: 7px; }
+
+th.col.dim { opacity: 0.45; }
+
+/* 行 */
+td, th { vertical-align: top; }
+
+/* 左侧固定的「轮次 + 问题」单元格 */
+td.turncell {
+	position: sticky; left: 0; z-index: 4;
+	background: var(--bg-2);
+	border-right: 1px solid var(--border-2);
+	border-bottom: 1px solid var(--border);
+	width: 168px; min-width: 168px;
+	padding: 8px 10px;
+}
+
+.turncell .no {
+	font-size: 0.78em; color: var(--fg-3);
+	display: flex; align-items: center; gap: 6px; margin-bottom: 5px;
+}
+
+.turncell .no b {
+	color: var(--fg-2); font-size: 1.1em; font-weight: 600;
+}
+
+.turncell .q {
+	font-size: 0.92em; line-height: 1.5; color: var(--fg);
+	display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+
+.turncell .q.open { -webkit-line-clamp: unset; }
+
+.turncell .more {
+	margin-top: 5px; font-size: 0.78em; color: var(--accent); cursor: pointer;
+}
+
+/* 回答格 */
+td.cell {
+	border-right: 1px solid var(--border);
+	border-bottom: 1px solid var(--border);
+	padding: 8px 10px;
+	min-width: 210px; width: 210px;
+	font-size: 0.94em;
+	vertical-align: top;
+}
+
+/* 紧凑模式下：限制行数 + 淡出 */
+body.density-compact td.cell .inner {
+	max-height: 96px;
+	overflow: hidden;
+	position: relative;
+	mask-image: linear-gradient(to bottom, #000 62%, transparent);
+	-webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent);
+}
+
+body.density-compact td.cell.open .inner {
+	max-height: none;
+	mask-image: none;
+	-webkit-mask-image: none;
+}
+
+body.density-comfy td.cell .inner { max-height: 420px; overflow-y: auto; }
+
+td.cell.expandable { cursor: pointer; }
+
+td.cell:hover { background: var(--hover); }
+
+td.cell.ok { background: color-mix(in srgb, var(--ok) 5%, transparent); }
+td.cell.stream { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+td.cell.bad { background: color-mix(in srgb, var(--err) 7%, transparent); }
+td.cell.wait { background: color-mix(in srgb, var(--fg-3) 6%, transparent); }
+
+.cell-foot {
+	display: flex; align-items: center; gap: 6px;
+	margin-top: 6px; padding-top: 5px;
+	border-top: 1px dotted var(--border);
+	font-size: 0.8em; color: var(--fg-3);
+}
+
+.placeholder { color: var(--fg-3); font-size: 0.9em; }
+
+/* 生成中光标 */
+.caret {
+	display: inline-block; width: 6px; height: 12px;
+	background: var(--accent); vertical-align: text-bottom;
+	animation: blink 1s steps(2) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* 密度：紧凑时表格更紧 */
+body.density-compact td.cell { padding: 6px 8px; line-height: 1.55; }
+body.density-compact .md p { margin-bottom: 0.45em; }
+
+/* ---------- 底部单行输入 ---------- */
+.bottom {
+	flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+	padding: 7px 10px; border-top: 1px solid var(--border-2);
+	background: var(--bg-1);
+}
+
+.bottom .thumb { width: 26px; height: 26px; border-radius: 5px; }
+
+.bottom textarea {
+	flex: 1 1 auto; border: 1px solid var(--border); border-radius: 7px;
+	background: var(--bg); padding: 6px 9px; outline: none; resize: none;
+	line-height: 1.5; max-height: 90px;
+}
+
+.bottom textarea:focus { border-color: var(--accent); }
+
+.legend { display: flex; align-items: center; gap: 9px; font-size: 0.8em; color: var(--fg-3); flex-wrap: wrap; }
+
+/* 窄窗口：表格本来就能横向滚动，这里只把顶部模型标签换成两行 */
+@media (max-width: 980px) {
+	.bar { height: auto; flex-wrap: wrap; padding: 6px 10px; }
+	.bar-title { max-width: 120px; }
+}
+</style>
+</head>
+<body class="density-compact">
+<div class="app">
+
+	<!-- 工具栏 -->
+	<div class="bar">
+		<span class="mk">M</span>
+		<span class="bar-title">你知道赛博朋克吗？</span>
+		<span class="sep"></span>
+
+		<label class="mbtn on" style="--c: var(--m1)"><input type="checkbox" checked hidden /><span class="mdot"></span>Sol</label>
+		<label class="mbtn" style="--c: var(--m2)"><input type="checkbox" hidden /><span class="mdot"></span>Astra</label>
+		<label class="mbtn on" style="--c: var(--m3)"><input type="checkbox" checked hidden /><span class="mdot"></span>Flash</label>
+		<label class="mbtn on" style="--c: var(--m4)"><input type="checkbox" checked hidden /><span class="mdot"></span>Pro</label>
+		<label class="mbtn on" style="--c: #8f8f9b"><input type="checkbox" checked hidden /><span class="mdot"></span>Sol-X</label>
+
+		<span class="grow"></span>
+
+		<div class="density" id="density">
+			<button class="on" data-d="compact">紧凑</button>
+			<button data-d="comfy">舒适</button>
+		</div>
+		<span class="sep"></span>
+		<button class="btn tiny ghost">只看我的模型</button>
+		<button class="btn tiny">历史</button>
+		<button class="btn tiny">导出 CSV</button>
+	</div>
+
+	<!-- 表格 -->
+	<div class="table-wrap">
+		<table class="grid">
+			<thead>
+				<tr>
+					<th class="corner">轮次 / 问题</th>
+
+					<th class="col" style="--c: var(--m1)">
+						<div class="ch-in">
+							<div class="ch-title">
+								<span class="dot error"></span>
+								<span class="nm">5.6-Sol</span>
+								<span class="acts">
+									<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+									<button class="icon-btn sm eye" title="隐藏该列"><svg class="i" viewBox="0 0 24 24"><path d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></button>
+								</span>
+							</div>
+							<div class="ch-sub"><span class="status error">2 失败</span></div>
+						</div>
+						<div class="ch-resize-todo"></div>
+					</th>
+
+					<th class="col" style="--c: var(--m2)">
+						<div class="ch-in">
+							<div class="ch-title">
+								<span class="dot done"></span>
+								<span class="nm">6-Astra</span>
+								<span class="acts">
+									<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+									<button class="icon-btn sm eye" title="隐藏该列"><svg class="i" viewBox="0 0 24 24"><path d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></button>
+								</span>
+							</div>
+							<div class="ch-sub"><span class="badge">共 2 轮 · 平均 5.0s</span></div>
+						</div>
+					</th>
+
+					<th class="col" style="--c: var(--m3)">
+						<div class="ch-in">
+							<div class="ch-title">
+								<span class="dot streaming"></span>
+								<span class="nm">V4.1-Flash</span>
+								<span class="acts">
+									<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+									<button class="icon-btn sm eye" title="隐藏该列"><svg class="i" viewBox="0 0 24 24"><path d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></button>
+								</span>
+							</div>
+							<div class="ch-sub"><span class="status streaming">生成中 2/4</span></div>
+						</div>
+					</th>
+
+					<th class="col" style="--c: var(--m4)">
+						<div class="ch-in">
+							<div class="ch-title">
+								<span class="dot done"></span>
+								<span class="nm">V4-Pro-0813</span>
+								<span class="acts">
+									<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+									<button class="icon-btn sm eye" title="隐藏该列"><svg class="i" viewBox="0 0 24 24"><path d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></button>
+								</span>
+							</div>
+							<div class="ch-sub"><span class="badge">共 2 轮 · 平均 7.2s</span></div>
+						</div>
+					</th>
+
+					<th class="col dim" style="--c: #8f8f9b">
+						<div class="ch-in">
+							<div class="ch-title">
+								<span class="dot pending"></span>
+								<span class="nm">Sol-X（结果已隐藏）</span>
+							</div>
+							<div class="ch-sub"><span>点击眼睛可恢复显示</span></div>
+						</div>
+					</th>
+				</tr>
+			</thead>
+
+			<tbody>
+				<!-- 第 1 轮 -->
+				<tr>
+					<td class="turncell">
+						<div class="no"><b>1</b><span>21:23</span></div>
+						<div class="q">你知道赛博朋克吗？</div>
+					</td>
+
+					<td class="cell bad">
+						<div class="inner">
+							<div class="notice error">NoPermissions —— 该模型需要先授权。首次使用时 VS Code 会弹授权请求，允许即可；企业策略也可能拦截。</div>
+						</div>
+						<div class="cell-foot"><span class="status error"><span class="dot error"></span>失败</span><span class="grow"></span><button class="btn tiny">重试</button></div>
+					</td>
+
+					<td class="cell ok expandable">
+						<div class="inner md">
+							<p>赛博朋克是一种<strong>反乌托邦式的科幻美学</strong>，关心的不是机器本身，而是技术权力如何重新分配人的位置。</p>
+							<ul>
+								<li>技术层：AI、义体、脑机接口无处不在</li>
+								<li>权力层：巨型企业取代政府</li>
+								<li>个体层：人在高度连接中被异化</li>
+							</ul>
+						</div>
+						<div class="cell-foot"><span class="status done"><span class="dot done"></span>完成 · 4.6s</span><span class="grow"></span><span class="badge mono">420 字</span></div>
+					</td>
+
+					<td class="cell stream expandable open">
+						<div class="inner md">
+							<p><strong>知道。</strong>赛博朋克（Cyberpunk）是科幻的一个分支，核心框架为：</p>
+							<blockquote>High tech, low life —— 高科技，低生活。</blockquote>
+							<p>它通常指一个<strong>技术高度发达、但社会严重分化</strong>的近未来：</p>
+							<ul>
+								<li>巨型企业掌握权力，政府被弱化或腐化</li>
+								<li>人工智能、人体改造、脑机接口、虚拟现实普及</li>
+								<li>黑客、雇佣兵、边缘人在底层挣扎</li>
+								<li>监控、贫富悬殊、身份危机、异化成为常见主题</li>
+							</ul>
+							<p>视觉上常见：霓虹灯、雨夜、贫民窟、摩天楼、东方元素、故障艺术。<span class="caret"></span></p>
+						</div>
+						<div class="cell-foot"><span class="status streaming"><span class="dot streaming"></span>生成中 · 4.8s</span><span class="grow"></span><button class="btn tiny danger">停止</button></div>
+					</td>
+
+					<td class="cell ok expandable">
+						<div class="inner md">
+							<table>
+								<thead><tr><th>对比项</th><th>蒸汽朋克</th></tr></thead>
+								<tbody>
+									<tr><td>时代背景</td><td>19 世纪工业革命</td></tr>
+									<tr><td>核心技术</td><td>蒸汽机、齿轮</td></tr>
+									<tr><td>视觉风格</td><td>黄铜、皮革</td></tr>
+								</tbody>
+							</table>
+						</div>
+						<div class="cell-foot"><span class="status done"><span class="dot done"></span>完成 · 9.1s</span><span class="grow"></span><span class="badge mono">640 字</span></div>
+					</td>
+
+					<td class="cell wait">
+						<div class="inner"><span class="placeholder">已隐藏结果（仍参与提问）</span></div>
+						<div class="cell-foot"><span class="status"><span class="dot done"></span>完成 · 3.2s</span></div>
+					</td>
+				</tr>
+
+				<!-- 第 2 轮 -->
+				<tr>
+					<td class="turncell">
+						<div class="no"><b>2</b><span>21:26</span></div>
+						<div class="q">和蒸汽朋克有啥区别？</div>
+					</td>
+
+					<td class="cell wait">
+						<div class="inner"><span class="placeholder">跳过（上一轮失败后未重试）</span></div>
+						<div class="cell-foot"><span class="status"><span class="dot cancelled"></span>已取消</span></div>
+					</td>
+
+					<td class="cell ok expandable">
+						<div class="inner md">
+							<p>两者都是「复古未来主义」，但<strong>想象的时态不同</strong>：蒸汽朋克向后看，赛博朋克向前看。</p>
+						</div>
+						<div class="cell-foot"><span class="status done"><span class="dot done"></span>完成 · 5.4s</span></div>
+					</td>
+
+					<td class="cell ok expandable">
+						<div class="inner md">
+							<p><strong>一句话概括：</strong></p>
+							<ul>
+								<li>赛博朋克：近未来的高科技、低生活、反乌托邦。</li>
+								<li>蒸汽朋克：架空的 19 世纪过去，用蒸汽和齿轮想象另一种现代性。</li>
+							</ul>
+							<table>
+								<thead><tr><th>维度</th><th>蒸汽朋克</th><th>赛博朋克</th></tr></thead>
+								<tbody>
+									<tr><td>技术基础</td><td>蒸汽机、齿轮</td><td>网络、AI、义体</td></tr>
+									<tr><td>视觉风格</td><td>黄铜、皮革</td><td>霓虹、雨夜</td></tr>
+									<tr><td>权力结构</td><td>帝国、贵族</td><td>巨型企业、寡头</td></tr>
+								</tbody>
+							</table>
+						</div>
+						<div class="cell-foot"><span class="status done"><span class="dot done"></span>完成 · 9.1s</span><span class="grow"></span><span class="badge mono">980 字</span></div>
+					</td>
+
+					<td class="cell wait">
+						<div class="inner"><span class="placeholder">已排队…</span></div>
+						<div class="cell-foot"><span class="status"><span class="dot pending"></span>等待中</span></div>
+					</td>
+
+					<td class="cell wait">
+						<div class="inner"><span class="placeholder">已隐藏结果</span></div>
+						<div class="cell-foot"><span class="status"><span class="dot done"></span>完成 · 6.0s</span></div>
+					</td>
+				</tr>
+			</tbody>
+		</table>
+	</div>
+
+	<!-- 底部输入 -->
+	<div class="bottom">
+		<div class="thumb"></div>
+		<textarea rows="1" placeholder="追问…（回车发送）"></textarea>
+		<button class="btn danger" disabled>停止</button>
+		<button class="btn primary">发送</button>
+	</div>
+
+	<div class="bar" style="height:30px;border-top:1px solid var(--border);border-bottom:none">
+		<div class="legend grow">
+			<span><span class="dot done"></span> 完成</span>
+			<span><span class="dot streaming"></span> 生成中</span>
+			<span><span class="dot pending"></span> 等待中</span>
+			<span><span class="dot error"></span> 失败</span>
+			<span><span class="dot cancelled"></span> 已取消</span>
+			<span class="sep"></span>
+			<span>点单元格可展开 / 收起全文</span>
+			<span class="sep"></span>
+			<span>问题列固定在左侧，横向滚动时始终可见</span>
+		</div>
+		<span class="badge">5 列 · 10 次请求 · 总计 18.3s</span>
+	</div>
+</div>
+
+<script>
+	// 密度切换
+	document.querySelectorAll('#density button').forEach(function (b) {
+		b.addEventListener('click', function () {
+			document.querySelectorAll('#density button').forEach(function (x) { x.classList.remove('on'); });
+			b.classList.add('on');
+			document.body.className = 'density-' + b.dataset.d;
+		});
+	});
+
+	// 点单元格展开 / 收起全文
+	document.querySelectorAll('td.cell.expandable').forEach(function (cell) {
+		cell.addEventListener('click', function () { cell.classList.toggle('open'); });
+	});
+
+	// 模型开关
+	document.querySelectorAll('.mbtn').forEach(function (m) {
+		m.addEventListener('click', function () { m.classList.toggle('on'); });
+	});
+
+	// 问题列「展开全文」
+	document.querySelectorAll('.turncell .q').forEach(function (q) {
+		q.addEventListener('click', function () { q.classList.toggle('open'); });
+	});
+
+	// 深浅色：双击工具栏空白处
+	document.querySelector('.bar').addEventListener('dblclick', function () {
+		var r = document.documentElement;
+		r.dataset.theme = r.dataset.theme === 'dark' ? 'light' : 'dark';
+	});
+</script>
+</body>
+</html>

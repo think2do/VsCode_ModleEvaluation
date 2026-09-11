@@ -361,6 +361,13 @@ body.resizing * {
 	margin-bottom: 22px;
 }
 
+.turn-label {
+	margin-bottom: 8px;
+	font-size: 0.82em;
+	font-weight: 600;
+	opacity: 0.65;
+}
+
 .user {
 	display: flex;
 	flex-direction: column;

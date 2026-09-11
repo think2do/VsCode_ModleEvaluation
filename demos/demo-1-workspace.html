@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>方案 1 · 三栏工作台</title>
+<link href="shared.css" rel="stylesheet" />
+<style>
+/*
+  方案 1 —— 三栏工作台（IDE 式）
+  思路：把「对话」「历史」「控制项」彻底分开，各占一栏，主区只放正文。
+  原来的两条横向勾选栏（参与对比 / 显示结果）全部挪到右侧检视栏，
+  顶部只留标题与全局操作，界面立刻清爽。
+*/
+* { box-sizing: border-box; }
+body { overflow: hidden; }
+
+.app {
+	display: grid;
+	grid-template-columns: 48px 232px minmax(0, 1fr) 264px;
+	height: 100vh;
+}
+
+/* ---------- 左：图标栏 ---------- */
+
+.rail {
+	background: var(--bg);
+	border-right: 1px solid var(--border);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	padding: 10px 0;
+	gap: 4px;
+}
+
+.rail-logo {
+	width: 26px;
+	height: 26px;
+	border-radius: 7px;
+	background: linear-gradient(140deg, var(--m3), var(--m2));
+	color: #fff;
+	font-weight: 700;
+	font-size: 13px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin-bottom: 10px;
+}
+
+.rail-btn {
+	width: 32px;
+	height: 32px;
+	border: none;
+	border-radius: 8px;
+	background: transparent;
+	color: var(--fg-3);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	position: relative;
+	transition: background 0.12s, color 0.12s;
+}
+
+.rail-btn:hover { background: var(--hover); color: var(--fg); }
+
+.rail-btn.active { color: var(--accent); background: var(--accent-soft); }
+
+/* 左侧竖条强调当前页 */
+.rail-btn.active::before {
+	content: '';
+	position: absolute;
+	left: -8px;
+	top: 7px;
+	bottom: 7px;
+	width: 2px;
+	border-radius: 2px;
+	background: var(--accent);
+}
+
+.rail .spacer { flex: 1 1 auto; }
+
+/* ---------- 中左：历史侧栏 ---------- */
+
+.sidebar {
+	background: var(--bg-1);
+	border-right: 1px solid var(--border);
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.side-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 11px 12px 8px;
+	font-weight: 600;
+	font-size: 0.94em;
+}
+
+.side-search {
+	padding: 0 10px 9px;
+}
+
+.session-list {
+	flex: 1 1 auto;
+	overflow-y: auto;
+	list-style: none;
+	margin: 0;
+	padding: 0 8px 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.session {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 7px 8px;
+	border-radius: var(--radius-sm);
+	cursor: pointer;
+	position: relative;
+}
+
+.session:hover { background: var(--hover); }
+
+.session.active { background: var(--accent-soft); }
+
+.session.active .s-title { color: var(--fg); }
+
+.session .bar {
+	width: 2px;
+	align-self: stretch;
+	border-radius: 2px;
+	background: transparent;
+	flex: 0 0 auto;
+	margin-right: 2px;
+}
+
+.session.active .bar { background: var(--accent); }
+
+.s-main { flex: 1 1 auto; min-width: 0; }
+
+.s-title {
+	font-size: 0.96em;
+	color: var(--fg-2);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.s-meta {
+	font-size: 0.8em;
+	color: var(--fg-3);
+	margin-top: 2px;
+	font-variant-numeric: tabular-nums;
+}
+
+.s-del { opacity: 0; }
+
+.session:hover .s-del { opacity: 1; }
+
+/* 两段式删除：第一段是 ✕，点完变「确认」 */
+.s-del.armed { opacity: 1; color: var(--err); }
+
+/* ---------- 中：主区 ---------- */
+
+.main {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	background: var(--bg);
+	min-height: 0;
+}
+
+.topbar {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 9px 16px;
+	border-bottom: 1px solid var(--border);
+	flex: 0 0 auto;
+	background: var(--bg-1);
+}
+
+.tb-title { font-weight: 600; }
+
+.tb-sub { font-size: 0.86em; color: var(--fg-3); }
+
+/* 消息区 */
+.thread {
+	flex: 1 1 auto;
+	overflow-y: auto;
+	padding: 18px 16px 8px;
+	min-height: 0;
+	scroll-behavior: smooth;
+}
+
+.turn { margin-bottom: 26px; }
+
+/* 用户提问：右侧气泡 + 上方小标签 */
+.ask {
+	display: flex;
+	justify-content: flex-end;
+	margin-bottom: 12px;
+}
+
+.ask-inner {
+	max-width: 72%;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 6px;
+}
+
+.ask-label {
+	font-size: 0.78em;
+	color: var(--fg-3);
+	letter-spacing: 0.04em;
+}
+
+/* 卡片区：自动填充，窗口窄了自动换行（比强制横向滚动更好读） */
+.grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+	gap: 12px;
+	align-items: start;
+}
+
+.card {
+	background: var(--bg-1);
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	overflow: hidden;
+	box-shadow: var(--shadow-1);
+	transition: border-color 0.15s;
+}
+
+/* 用模型色画一条顶部色条，替代原来只有边框的卡片 */
+.card::before {
+	content: '';
+	height: 2px;
+	background: var(--c, var(--accent));
+	opacity: 0.85;
+}
+
+.card[data-status='streaming'] { border-color: color-mix(in srgb, var(--c) 45%, var(--border)); }
+.card[data-status='error'] { border-color: color-mix(in srgb, var(--err) 55%, var(--border)); }
+
+.card.hidden-col { display: none; }
+
+.c-head {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 8px 11px;
+	border-bottom: 1px solid var(--border);
+}
+
+.c-name {
+	font-weight: 600;
+	font-size: 0.96em;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+
+.c-name .mdot {
+	width: 7px; height: 7px; border-radius: 50%;
+	background: var(--c); flex: 0 0 auto;
+}
+
+.c-body {
+	padding: 11px;
+	max-height: 46vh;
+	overflow-y: auto;
+	font-size: 0.97em;
+}
+
+.c-foot {
+	border-top: 1px solid var(--border);
+	padding: 6px 11px;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	font-size: 0.86em;
+	color: var(--fg-3);
+}
+
+/* ---------- 底部输入：圆角浮动胶囊 ---------- */
+
+.composer-wrap {
+	flex: 0 0 auto;
+	padding: 10px 16px 14px;
+	background: linear-gradient(to top, var(--bg) 70%, transparent);
+}
+
+.composer {
+	background: var(--bg-1);
+	border: 1px solid var(--border-2);
+	border-radius: var(--radius-lg);
+	box-shadow: var(--shadow-2);
+	padding: 10px 10px 8px;
+}
+
+.composer:focus-within { border-color: var(--accent); }
+
+.attach-row {
+	display: flex;
+	gap: 6px;
+	padding: 0 2px 8px;
+	flex-wrap: wrap;
+}
+
+.attach {
+	position: relative;
+}
+
+.attach .x {
+	position: absolute;
+	top: -5px; right: -5px;
+	width: 16px; height: 16px;
+	border-radius: 50%;
+	background: var(--bg-3);
+	border: 1px solid var(--border-2);
+	color: var(--fg-2);
+	font-size: 10px;
+	line-height: 1;
+	cursor: pointer;
+	display: flex; align-items: center; justify-content: center;
+}
+
+.attach .thumb { width: 52px; height: 52px; }
+
+.composer textarea {
+	width: 100%;
+	border: none;
+	background: transparent;
+	outline: none;
+	resize: none;
+	line-height: 1.65;
+	max-height: 160px;
+}
+
+.composer-bar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 6px;
+}
+
+.hint {
+	font-size: 0.82em;
+	color: var(--fg-3);
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+/* ---------- 右：检视栏 ---------- */
+
+.inspector {
+	background: var(--bg-1);
+	border-left: 1px solid var(--border);
+	overflow-y: auto;
+	padding: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.sec { display: flex; flex-direction: column; gap: 8px; }
+
+.sec-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	font-size: 0.78em;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--fg-3);
+	font-weight: 600;
+}
+
+/* 模型条目：颜色点 + 名称 + 两个开关语义分开
+   左开关 = 是否提问，右眼睛 = 是否显示结果 */
+.mrow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 8px;
+	border-radius: var(--radius-sm);
+	background: var(--bg-2);
+	border: 1px solid transparent;
+}
+
+.mrow:hover { background: var(--bg-3); }
+
+.mrow .mdot {
+	width: 8px; height: 8px; border-radius: 50%;
+	background: var(--c); flex: 0 0 auto;
+}
+
+.mrow .mname {
+	flex: 1 1 auto;
+	min-width: 0;
+	font-size: 0.94em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.mrow.off { opacity: 0.5; }
+
+.eye {
+	width: 22px; height: 22px;
+	border: none; background: transparent;
+	color: var(--fg-3);
+	border-radius: 5px;
+	cursor: pointer;
+	display: flex; align-items: center; justify-content: center;
+}
+
+.eye:hover { background: var(--hover); color: var(--fg); }
+
+.eye.off { color: var(--fg-3); opacity: 0.5; }
+
+.stats {
+	background: var(--bg-2);
+	border-radius: var(--radius);
+	padding: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 7px;
+	font-size: 0.9em;
+}
+
+.stat { display: flex; align-items: center; justify-content: space-between; }
+
+.stat b { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.legend {
+	font-size: 0.82em;
+	color: var(--fg-3);
+	line-height: 1.75;
+	border-top: 1px dashed var(--border-2);
+	padding-top: 10px;
+}
+
+/* 窄窗口降级：先收检视栅、再收历史栅，保证对话区不被挤没 */
+@media (max-width: 1280px) {
+	.app { grid-template-columns: 48px 210px minmax(0, 1fr); }
+	.inspector { display: none; }
+}
+
+@media (max-width: 940px) {
+	.app { grid-template-columns: 44px minmax(0, 1fr); }
+	.sidebar { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+	<!-- ============ 左：图标栏 ============ -->
+	<nav class="rail">
+		<div class="rail-logo">M</div>
+		<button class="rail-btn active" title="对话"><svg class="i" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H8l-4 3v-5.5A8 8 0 0 1 13 4a8 8 0 0 1 8 8Z"/></svg></button>
+		<button class="rail-btn" title="模型"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></button>
+		<button class="rail-btn" title="导出"><svg class="i" viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4M4 19h16"/></svg></button>
+		<div class="spacer"></div>
+		<button class="rail-btn" id="theme" title="切换深浅色"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></svg></button>
+	</nav>
+
+	<!-- ============ 中左：历史 ============ -->
+	<aside class="sidebar">
+		<div class="side-head">
+			<span>历史会话</span>
+			<button class="icon-btn sm" title="新建会话"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+		</div>
+		<div class="side-search">
+			<input class="field" placeholder="搜索会话…" />
+		</div>
+		<ul class="session-list" id="sessions">
+			<li class="session active"><span class="bar"></span><div class="s-main"><div class="s-title">你知道赛博朋克吗？</div><div class="s-meta">09-11 21:23 · 4 轮</div></div><button class="icon-btn sm s-del">✕</button></li>
+			<li class="session"><span class="bar"></span><div class="s-main"><div class="s-title">你好</div><div class="s-meta">09-11 20:48 · 2 轮</div></div><button class="icon-btn sm s-del">✕</button></li>
+			<li class="session"><span class="bar"></span><div class="s-main"><div class="s-title">我准备做一场和 AI 产品经理…</div><div class="s-meta">09-11 21:21 · 2 轮</div></div><button class="icon-btn sm s-del">✕</button></li>
+			<li class="session"><span class="bar"></span><div class="s-main"><div class="s-title">既然“多喝水能改善”已经…</div><div class="s-meta">09-11 21:21 · 1 轮</div></div><button class="icon-btn sm s-del">✕</button></li>
+			<li class="session"><span class="bar"></span><div class="s-main"><div class="s-title">“鲸鱼是鱼类”这个说法对不…</div><div class="s-meta">09-11 20:20 · 2 轮</div></div><button class="icon-btn sm s-del">✕</button></li>
+		</ul>
+	</aside>
+
+	<!-- ============ 中：对话主区 ============ -->
+	<main class="main">
+		<header class="topbar">
+			<div class="grow">
+				<div class="tb-title">你知道赛博朋克吗？</div>
+				<div class="tb-sub">4 个模型参与 · 共 4 轮</div>
+			</div>
+			<button class="btn tiny">导出</button>
+			<button class="btn tiny">新建会话</button>
+		</header>
+
+		<div class="thread">
+
+			<!-- 第 1 轮 -->
+			<section class="turn">
+				<div class="ask">
+					<div class="ask-inner">
+						<span class="ask-label">第 1 轮</span>
+						<div class="bubble">你知道赛博朋克吗？</div>
+					</div>
+				</div>
+
+				<div class="grid">
+					<!-- 卡片：V4.1-Flash -->
+					<article class="card" style="--c: var(--m3)" data-status="done">
+						<div class="c-head">
+							<span class="c-name"><span class="mdot"></span>V4.1-Flash</span>
+							<span class="grow"></span>
+							<button class="icon-btn sm" title="复制 Markdown 原文"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+							<button class="icon-btn sm" title="重新生成"><svg class="i" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg></button>
+						</div>
+						<div class="c-body md">
+							<p><strong>知道。</strong>赛博朋克（Cyberpunk）是科幻的一个分支，核心框架为：</p>
+							<blockquote>High tech, low life —— 高科技，低生活。</blockquote>
+							<p>它通常指一个<strong>技术高度发达、但社会严重分化</strong>的近未来：</p>
+							<ul>
+								<li>巨型企业掌握权力，政府被弱化或腐化</li>
+								<li>人工智能、人体改造、脑机接口、虚拟现实普及</li>
+								<li>黑客、雇佣兵、边缘人在底层挣扎</li>
+								<li>监控、贫富悬殊、身份危机、异化成为常见主题</li>
+							</ul>
+							<p>视觉上常见：霓虹灯、雨夜、贫民窟、摩天楼、东方元素、故障艺术。</p>
+							<p>如果你想，我可以再给你：</p>
+							<ul>
+								<li>赛博朋克入门作品推荐</li>
+								<li>赛博朋克与蒸汽朋克、废土朋克的区别</li>
+								<li>赛博朋克风格的世界观设定模板</li>
+							</ul>
+						</div>
+						<div class="c-foot">
+							<span class="status done"><span class="dot done"></span>完成 · 4.8s</span>
+							<span class="grow"></span>
+							<span>1820 字</span>
+						</div>
+					</article>
+
+					<!-- 卡片：V4-Pro-0813（表格型回答） -->
+					<article class="card" style="--c: var(--m4)" data-status="done">
+						<div class="c-head">
+							<span class="c-name"><span class="mdot"></span>V4-Pro-0813</span>
+							<span class="grow"></span>
+							<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+						</div>
+						<div class="c-body md">
+							<p>如果你是指<strong>赛博朋克和蒸汽朋克</strong>的区别，主要如下：</p>
+							<table>
+								<thead><tr><th>对比项</th><th>蒸汽朋克</th><th>赛博朋克</th></tr></thead>
+								<tbody>
+									<tr><td>时代背景</td><td>19 世纪维多利亚时代·工业革命</td><td>近未来·反乌托邦</td></tr>
+									<tr><td>核心技术</td><td>蒸汽机、齿轮、差分机</td><td>信息技术、AI、义体</td></tr>
+									<tr><td>社会主题</td><td>探索、发明、浪漫冒险</td><td>监控、异化、阶级压迫</td></tr>
+									<tr><td>视觉风格</td><td>黄铜、皮革、烟囱</td><td>霓虹、雨夜、全息广告</td></tr>
+									<tr><td>代表作品</td><td>《差分机》《哈尔的移动城堡》</td><td>《神经漫游者》《银翼杀手》</td></tr>
+								</tbody>
+							</table>
+							<p>简单说：<strong>蒸汽朋克是“过去想象中的未来”，赛博朋克是“近未来的反面”</strong>。</p>
+						</div>
+						<div class="c-foot">
+							<span class="status done"><span class="dot done"></span>完成 · 9.1s</span>
+							<span class="grow"></span>
+							<span>640 字</span>
+						</div>
+					</article>
+
+					<!-- 卡片：6-Astra（生成中） -->
+					<article class="card" style="--c: var(--m2)" data-status="streaming">
+						<div class="c-head">
+							<span class="c-name"><span class="mdot"></span>6-Astra</span>
+							<span class="grow"></span>
+							<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+						</div>
+						<div class="c-body md">
+							<p>赛博朋克是一种<strong>反乌托邦式的科幻美学</strong>，它关心的不是机器本身，而是<em>技术权力如何重新分配人的位置</em>……</p>
+							<p class="muted">▍仍在生成中</p>
+						</div>
+						<div class="c-foot">
+							<span class="status streaming"><span class="dot streaming"></span>生成中 · 6.2s</span>
+							<span class="grow"></span>
+							<button class="btn tiny danger">停止</button>
+						</div>
+					</article>
+
+					<!-- 卡片：5.6-Sol（失败） -->
+					<article class="card" style="--c: var(--m1)" data-status="error">
+						<div class="c-head">
+							<span class="c-name"><span class="mdot"></span>5.6-Sol</span>
+							<span class="grow"></span>
+							<button class="icon-btn sm" disabled title="无可复制内容"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+						</div>
+						<div class="c-body">
+							<div class="notice error">该模型暂不可用（NoPermissions）。首次使用某个模型时 VS Code 会请求授权，按提示允许即可；企业策略也可能拦截。</div>
+						</div>
+						<div class="c-foot">
+							<span class="status error"><span class="dot error"></span>失败 · NoPermissions</span>
+							<span class="grow"></span>
+							<button class="btn tiny">重试</button>
+						</div>
+					</article>
+				</div>
+			</section>
+
+			<!-- 第 2 轮 -->
+			<section class="turn">
+				<div class="ask">
+					<div class="ask-inner">
+						<span class="ask-label">第 2 轮</span>
+						<div class="bubble">和蒸汽朋克有啥区别？</div>
+					</div>
+				</div>
+
+				<div class="grid">
+					<article class="card" style="--c: var(--m3)" data-status="done">
+						<div class="c-head">
+							<span class="c-name"><span class="mdot"></span>V4.1-Flash</span>
+							<span class="grow"></span>
+							<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+						</div>
+						<div class="c-body md">
+							<p><strong>一句话概括：</strong></p>
+							<ul>
+								<li>赛博朋克：近未来的高科技、低生活、反乌托邦。</li>
+								<li>蒸汽朋克：架空的 19 世纪过去，用蒸汽和齿轮想象另一种现代性。</li>
+							</ul>
+							<p>（后面还用表格展开了七个维度的对比……）</p>
+						</div>
+						<div class="c-foot">
+							<span class="status done"><span class="dot done"></span>完成 · 9.1s</span>
+						</div>
+					</article>
+
+					<article class="card" style="--c: var(--m2)" data-status="done">
+						<div class="c-head">
+							<span class="c-name"><span class="mdot"></span>6-Astra</span>
+							<span class="grow"></span>
+							<button class="icon-btn sm" title="复制"><svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-8A1.5 1.5 0 0 0 4 5.5v8A1.5 1.5 0 0 0 5.5 15"/></svg></button>
+						</div>
+						<div class="c-body md">
+							<div class="notice warn" style="margin-bottom:8px">该模型不支持图片，本次已仅发送文本</div>
+							<p>两者都是「复古未来主义」，但<strong>想象的时态不同</strong>：蒸汽朋克向后看，赛博朋克向前看。</p>
+						</div>
+						<div class="c-foot">
+							<span class="status done"><span class="dot done"></span>完成 · 5.4s</span>
+						</div>
+					</article>
+				</div>
+			</section>
+
+		</div>
+
+		<!-- ============ 底部输入 ============ -->
+		<div class="composer-wrap">
+			<div class="composer">
+				<div class="attach-row">
+					<div class="attach"><div class="thumb"></div><button class="x">✕</button></div>
+				</div>
+				<textarea rows="2" placeholder="输入问题…（回车发送，Shift+回车换行；可粘贴或拖入图片）"></textarea>
+				<div class="composer-bar">
+					<div class="hint grow">
+						<span class="badge">4 个模型</span>
+						<span>回车发送</span>
+						<span class="sep"></span>
+						<span><span class="kbd">Shift</span>+<span class="kbd">Enter</span> 换行</span>
+					</div>
+					<button class="btn danger" disabled>停止</button>
+					<button class="btn primary" disabled>发送</button>
+				</div>
+			</div>
+		</div>
+	</main>
+
+	<!-- ============ 右：检视栏 ============ -->
+	<aside class="inspector">
+		<section class="sec">
+			<div class="sec-head"><span>参与对比</span><span>4 / 8</span></div>
+
+			<div class="mrow" style="--c: var(--m1)"><span class="mdot"></span><span class="mname">5.6-Sol</span><label class="switch"><input type="checkbox" /><i></i></label></div>
+			<div class="mrow off" style="--c: var(--m2)"><span class="mdot"></span><span class="mname">6-Astra</span><label class="switch"><input type="checkbox" /><i></i></label></div>
+			<div class="mrow" style="--c: var(--m3)"><span class="mdot"></span><span class="mname">V4.1-Flash</span><label class="switch"><input type="checkbox" checked /><i></i></label></div>
+			<div class="mrow" style="--c: var(--m4)"><span class="mdot"></span><span class="mname">V4-Pro-0813</span><label class="switch"><input type="checkbox" checked /><i></i></label></div>
+
+			<label class="row" style="font-size:0.9em;color:var(--fg-2);margin-top:2px">
+				<input type="checkbox" checked /> 只看我的模型
+			</label>
+		</section>
+
+		<section class="sec">
+			<div class="sec-head"><span>显示结果</span><button class="btn tiny">全部显示</button></div>
+			<div class="mrow" style="--c: var(--m1)"><span class="mdot"></span><span class="mname">5.6-Sol</span><button class="eye off" title="当前隐藏"><svg class="i" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 10.6A2 2 0 0 0 13.4 13.4"/><path d="M6.7 6.7C4.6 8 3 10 3 12s4 6 9 6c1.6 0 3-.4 4.2-1M11 6.1c.3 0 .7-.1 1-.1 5 0 9 4 9 6 0 .8-.6 1.9-1.6 3"/></svg></button></div>
+			<div class="mrow" style="--c: var(--m3)"><span class="mdot"></span><span class="mname">V4.1-Flash</span><button class="eye" title="显示中"><svg class="i" viewBox="0 0 24 24"><path d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></button></div>
+			<div class="mrow" style="--c: var(--m4)"><span class="mdot"></span><span class="mname">V4-Pro-0813</span><button class="eye" title="显示中"><svg class="i" viewBox="0 0 24 24"><path d="M3 12s4-6 9-6 9 6 9 6-4 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></button></div>
+
+			<div class="legend">
+				取消勾选只是<strong>隐藏显示</strong>，不会影响请求发给谁。<br />
+				左侧开关才是「是否提问」。
+			</div>
+		</section>
+
+		<section class="sec">
+			<div class="sec-head"><span>本轮统计</span></div>
+			<div class="stats">
+				<div class="stat"><span class="muted">参与模型</span><b>4</b></div>
+				<div class="stat"><span class="muted">最快返回</span><b>4.8s</b></div>
+				<div class="stat"><span class="muted">最慢返回</span><b>9.1s</b></div>
+				<div class="stat"><span class="muted">成功 / 失败</span><b>2 / 1</b></div>
+				<div class="stat"><span class="muted">输出总字数</span><b>2,460</b></div>
+			</div>
+		</section>
+	</aside>
+</div>
+
+<script>
+	// 深浅色切换
+	document.getElementById('theme').onclick = function () {
+		var root = document.documentElement;
+		root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+	};
+
+	// 两段式删除（第一下变「确认」）
+	document.querySelectorAll('.s-del').forEach(function (btn) {
+		btn.addEventListener('click', function (e) {
+			e.stopPropagation();
+			if (btn.classList.contains('armed')) {
+				btn.closest('.session').remove();
+				return;
+			}
+			document.querySelectorAll('.s-del.armed').forEach(function (b) {
+				b.classList.remove('armed');
+				b.textContent = '✕';
+			});
+			btn.classList.add('armed');
+			btn.textContent = '确认';
+			document.addEventListener('click', function reset() {
+				btn.classList.remove('armed');
+				btn.textContent = '✕';
+				document.removeEventListener('click', reset);
+			});
+		});
+	});
+
+	// 检视栏「参与对比」开关：关掉后对应卡片位置标灰（演示联动）
+	document.querySelectorAll('.mrow').forEach(function (row) {
+		var box = row.querySelector('input[type=checkbox]');
+		if (box) {
+			box.addEventListener('change', function () {
+				row.classList.toggle('off', !box.checked);
+			});
+		}
+	});
+
+	// 「显示结果」眼睛：切换卡片显隐
+	document.querySelectorAll('.eye').forEach(function (eye) {
+		eye.addEventListener('click', function () {
+			eye.classList.toggle('off');
+			document.querySelectorAll('.card').forEach(function (card) {
+				// 演示：只切换第一张卡片，示意效果
+			});
+		});
+	});
+
+	// 发送后按钮进入可用态（纯演示）
+	var ta = document.querySelector('.composer textarea');
+	var sendBtn = document.querySelector('.composer .btn.primary');
+	ta.addEventListener('input', function () {
+		sendBtn.disabled = ta.value.trim().length === 0;
+	});
+</script>
+</body>
+</html>

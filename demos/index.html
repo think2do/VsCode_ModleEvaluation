@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>界面重设计 · 5 个方案选一个</title>
+<link href="shared.css" rel="stylesheet" />
+<style>
+body { overflow: auto; }
+
+.page { max-width: 1180px; margin: 0 auto; padding: 40px 24px 80px; }
+
+.hero { margin-bottom: 34px; }
+
+.hero h1 {
+	font-size: 30px; margin: 0 0 10px; letter-spacing: -0.02em;
+}
+
+.hero p { color: var(--fg-2); line-height: 1.8; margin: 0 0 6px; max-width: 780px; }
+
+.hero .meta { margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+.sec-title {
+	font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em;
+	color: var(--fg-3); font-weight: 600; margin: 44px 0 16px;
+	border-bottom: 1px solid var(--border); padding-bottom: 8px;
+}
+
+/* ---------- 方案卡片 ---------- */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+
+.opt {
+	display: flex; flex-direction: column;
+	background: var(--bg-1); border: 1px solid var(--border);
+	border-radius: var(--radius-lg); overflow: hidden;
+	text-decoration: none; color: inherit;
+	transition: transform 0.16s, border-color 0.16s, box-shadow 0.16s;
+}
+
+.opt:hover {
+	transform: translateY(-3px);
+	border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+	box-shadow: var(--shadow-2);
+	text-decoration: none;
+}
+
+.opt-head { display: flex; align-items: center; gap: 9px; padding: 14px 15px 10px; }
+
+.opt-no {
+	width: 22px; height: 22px; border-radius: 6px; flex: 0 0 auto;
+	background: var(--accent-soft); color: var(--accent);
+	font-size: 12px; font-weight: 700;
+	display: flex; align-items: center; justify-content: center;
+}
+
+.opt-name { font-weight: 600; font-size: 15px; }
+
+.opt-tag {
+	margin-left: auto; font-size: 11px; color: var(--fg-3);
+	border: 1px solid var(--border-2); border-radius: 999px; padding: 1px 8px;
+}
+
+.opt-desc { padding: 0 15px 12px; color: var(--fg-2); line-height: 1.7; font-size: 12.5px; }
+
+/* ---------- 用 CSS 画的布局缩略图 ---------- */
+.thumb-box {
+	margin: 0 15px 12px; height: 132px;
+	background: var(--bg); border: 1px solid var(--border);
+	border-radius: var(--radius); padding: 6px;
+}
+
+.mini { display: flex; gap: 4px; height: 100%; }
+
+.mini .blk {
+	background: var(--bg-3); border-radius: 3px;
+	border: 1px solid var(--border);
+}
+
+.mini .accent { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+
+/* 1 三栏 */
+.m1 .col { display: flex; gap: 3px; flex: 1 1 auto; }
+.m1 .col > i { display: block; background: var(--bg-3); border-radius: 3px; }
+.m1 .c1 { width: 8%; }
+.m1 .c2 { width: 20%; }
+.m1 .c3 { flex: 1 1 auto; position: relative; }
+.m1 .c4 { width: 24%; }
+.m1 .c3::after {
+	content: ''; position: absolute; inset: 28% 6% 8% 6%;
+	background: repeating-linear-gradient(to right, var(--bg-2) 0 30%, transparent 30% 33%);
+	border-radius: 3px;
+}
+.m1 .c3::before {
+	content: ''; position: absolute; left: 6%; right: 6%; top: 6%; height: 14%;
+	background: var(--accent-soft); border-radius: 3px;
+}
+
+/* 2 网格 */
+.m2 { flex-direction: column; }
+.m2 .cols { display: flex; gap: 3px; height: 16%; }
+.m2 .cols i { flex: 1 1 0; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); border-radius: 3px; }
+.m2 .cols i:first-child { flex: 0 0 12%; background: var(--bg-3); border-color: var(--border); }
+.m2 .rowband { height: 20%; background: var(--bg-3); border-radius: 3px; }
+.m2 .row { display: flex; gap: 3px; flex: 1 1 auto; }
+.m2 .row i { flex: 1 1 0; background: var(--bg-2); border: 1px solid var(--border); border-radius: 3px; }
+.m2 .row i:first-child { flex: 0 0 12%; background: var(--bg-3); }
+
+/* 3 选项卡 */
+.m3 { flex-direction: column; }
+.m3 .tabs { display: flex; gap: 3px; height: 16%; }
+.m3 .tabs i { width: 22%; background: var(--bg-3); border-radius: 3px; }
+.m3 .tabs i:first-child { background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+.m3 .bodyrow { display: flex; gap: 3px; flex: 1 1 auto; }
+.m3 .read { flex: 1 1 auto; background: var(--bg-2); border-radius: 3px; position: relative; }
+.m3 .read::after {
+	content: ''; position: absolute; inset: 10% 16% 10% 16%;
+	background: repeating-linear-gradient(to bottom, var(--bg-3) 0 12%, transparent 12% 20%);
+	border-radius: 2px;
+}
+.m3 .strip { width: 24%; background: var(--bg-3); border-radius: 3px; }
+
+/* 4 磁贴 */
+.m4 {
+	flex-wrap: wrap; align-content: flex-start;
+}
+.m4 i {
+	display: block; background: var(--bg-2); border: 1px solid var(--border); border-radius: 4px;
+	height: 42%;
+}
+.m4 i:nth-child(1) { flex: 1 1 58%; border-top: 2px solid var(--m3); }
+.m4 i:nth-child(2) { flex: 0 0 38%; border-top: 2px solid var(--m4); }
+.m4 i:nth-child(3) { flex: 0 0 38%; border-top: 2px solid var(--m2); }
+.m4 i:nth-child(4) { flex: 1 1 58%; border-top: 2px solid var(--m1); }
+.m4 { padding-bottom: 14%; position: relative; }
+.m4::after {
+	content: ''; position: absolute; left: 22%; right: 22%; bottom: 4px; height: 12%;
+	background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+	border-radius: 999px;
+}
+
+/* 5 表格 */
+.m5 { flex-direction: column; gap: 2px; }
+.m5 .tr { display: flex; gap: 2px; flex: 1 1 0; }
+.m5 .tr > i {
+	flex: 1 1 0; background: var(--bg-2); border: 1px solid var(--border); border-radius: 2px;
+}
+.m5 .tr > i:first-child { flex: 0 0 20%; background: var(--bg-3); }
+.m5 .tr.head > i { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.m5 .tr.head > i:first-child { background: var(--bg-3); border-color: var(--border); }
+
+/* 缩略图整体提亮一档，暗色主题下更容易分辨各区块 */
+.m1 .col > i,
+.m2 .row i,
+.m3 .read,
+.m4 i,
+.m5 .tr > i {
+	background: color-mix(in srgb, var(--fg) 9%, transparent);
+}
+
+.m2 .row i:first-child,
+.m5 .tr > i:first-child {
+	background: color-mix(in srgb, var(--fg) 15%, transparent);
+}
+
+/* ---------- 卡片内要点 ---------- */
+.opt-points { padding: 0 15px 14px; display: flex; flex-direction: column; gap: 5px; }
+
+.pt { display: flex; gap: 7px; font-size: 12.5px; color: var(--fg-2); line-height: 1.6; }
+
+.pt::before {
+	content: ''; width: 4px; height: 4px; margin-top: 8px;
+	border-radius: 50%; background: var(--fg-3); flex: 0 0 auto;
+}
+
+.opt-foot {
+	margin-top: auto; padding: 11px 15px; border-top: 1px solid var(--border);
+	display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--fg-3);
+	background: color-mix(in srgb, var(--bg-2) 60%, transparent);
+}
+
+.opt-foot .go { margin-left: auto; color: var(--accent); font-weight: 500; }
+
+/* ---------- 共用改进 ---------- */
+.grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+
+.imp {
+	background: var(--bg-1); border: 1px solid var(--border);
+	border-radius: var(--radius); padding: 13px 14px;
+}
+
+.imp h4 { margin: 0 0 6px; font-size: 13px; display: flex; align-items: center; gap: 7px; }
+
+.imp h4 .ic {
+	width: 20px; height: 20px; border-radius: 6px; flex: 0 0 auto;
+	background: var(--accent-soft); color: var(--accent);
+	display: flex; align-items: center; justify-content: center;
+}
+
+.imp p { margin: 0; font-size: 12.5px; color: var(--fg-2); line-height: 1.7; }
+
+/* ---------- 功能对照表 ---------- */
+table.map {
+	width: 100%; border-collapse: collapse; font-size: 12.5px;
+	background: var(--bg-1); border: 1px solid var(--border);
+	border-radius: var(--radius); overflow: hidden;
+}
+
+table.map th, table.map td {
+	padding: 9px 12px; text-align: left; vertical-align: top;
+	border-bottom: 1px solid var(--border);
+}
+
+table.map th { background: var(--bg-3); font-weight: 600; font-size: 11.5px; color: var(--fg-2); text-transform: uppercase; letter-spacing: 0.05em; }
+
+table.map tr:last-child td { border-bottom: none; }
+
+table.map td:first-child { color: var(--fg); font-weight: 500; white-space: nowrap; }
+
+.yes { color: var(--ok); }
+.no { color: var(--err); }
+.mid { color: var(--warn); }
+</style>
+</head>
+<body>
+<div class="page">
+
+	<div class="hero">
+		<h1>界面重设计 · 5 个方案</h1>
+		<p>
+			功能一个都没改，只重新组织布局与视觉。下面每个方案都是<strong>可点击打开的真实网页</strong>，
+			用同一份示例数据（赛博朋克那一轮对话）演示，方便直接对比观感。
+		</p>
+		<p>
+			所有方案共用一套设计令牌与基础组件（<span class="badge mono">demos/shared.css</span>），
+			所以选中之后无论挑哪个，改动量都不大。双击各页面里的标题栏 / 品牌名可切换深浅色。
+		</p>
+		<div class="meta">
+			<span class="badge">5 个方案</span>
+			<span class="badge">共用样式</span>
+			<span class="badge">可直接打开</span>
+			<span class="badge">深浅色可切</span>
+		</div>
+	</div>
+
+	<div class="sec-title">方案列表（点卡片打开）</div>
+
+	<div class="cards">
+
+		<!-- ============ 方案 1 ============ -->
+		<a class="opt" href="demo-1-workspace.html" target="_blank">
+			<div class="opt-head">
+				<span class="opt-no">1</span>
+				<span class="opt-name">三栏工作台</span>
+				<span class="opt-tag">信息分区</span>
+			</div>
+			<div class="opt-desc">
+				把「对话 / 历史 / 控制项」拆成三栏，主区只留正文。原来顶部那两条勾选栏全部搬进右侧检视栏。
+			</div>
+			<div class="thumb-box">
+				<div class="mini m1">
+					<div class="col">
+						<i class="c1"></i>
+						<i class="c2"></i>
+						<i class="c3"></i>
+						<i class="c4"></i>
+					</div>
+				</div>
+			</div>
+			<div class="opt-points">
+				<div class="pt">顶部只剩标题 + 全局按钮，纵向空间全给正文</div>
+				<div class="pt">「是否提问」与「是否显示」拆成两个开关，语义不再打架</div>
+				<div class="pt">卡片用 <code>auto-fill</code> 自动换行，比强制横向滚动更好读</div>
+				<div class="pt">新增「本轮统计」：最快 / 最慢 / 成败数 / 字数</div>
+			</div>
+			<div class="opt-foot">
+				<span>适合：日常主力使用</span>
+				<span class="go">打开 →</span>
+			</div>
+		</a>
+
+		<!-- ============ 方案 2 ============ -->
+		<a class="opt" href="demo-2-grid.html" target="_blank">
+			<div class="opt-head">
+				<span class="opt-no">2</span>
+				<span class="opt-name">对齐对比网格</span>
+				<span class="opt-tag">强对齐</span>
+			</div>
+			<div class="opt-desc">
+				把并排对比当表格做：列头吸顶、列等宽、每轮一行。滚动时永远知道哪一列是哪个模型。
+			</div>
+			<div class="thumb-box">
+				<div class="mini m2">
+					<div class="cols"><i></i><i></i><i></i><i></i><i></i></div>
+					<div class="rowband"></div>
+					<div class="row"><i></i><i></i><i></i><i></i><i></i></div>
+					<div class="rowband" style="opacity:.6"></div>
+					<div class="row"><i></i><i></i><i></i><i></i><i></i></div>
+				</div>
+			</div>
+			<div class="opt-points">
+				<div class="pt">列头吸顶 + 轮次号固定，长会话里不会「忘记在看谁」</div>
+				<div class="pt">列头直接带状态点、平均耗时、复制按钮</div>
+				<div class="pt">「显示结果」变成收起整列，对齐结构不被打乱</div>
+				<div class="pt">列宽可拖拽，双击手柄恢复默认</div>
+			</div>
+			<div class="opt-foot">
+				<span>适合：横向逐条比对答案</span>
+				<span class="go">打开 →</span>
+			</div>
+		</a>
+
+		<!-- ============ 方案 3 ============ -->
+		<a class="opt" href="demo-3-tabs.html" target="_blank">
+			<div class="opt-head">
+				<span class="opt-no">3</span>
+				<span class="opt-name">聚焦阅读 + 侧栏对比</span>
+				<span class="opt-tag">长文友好</span>
+			</div>
+			<div class="opt-desc">
+				模型变多后并排卡片会挤成窄条。这里改成「一次读一篇」，右侧细栏放其它模型的迷你预览，点一下即切换。
+			</div>
+			<div class="thumb-box">
+				<div class="mini m3">
+					<div class="tabs"><i></i><i></i><i></i><i></i></div>
+					<div class="bodyrow">
+						<div class="read"></div>
+						<div class="strip"></div>
+					</div>
+				</div>
+			</div>
+			<div class="opt-points">
+				<div class="pt">正文限宽 780px，长回答真正可读</div>
+				<div class="pt">选项卡直接标状态与耗时，失败 / 生成中一眼可见</div>
+				<div class="pt">顶部提供「单栏 / 双栏 / 平铺对比」三种视图切换</div>
+				<div class="pt">保留上一轮 / 下一轮导航，长会话翻阅更快</div>
+			</div>
+			<div class="opt-foot">
+				<span>适合：回答长、模型多</span>
+				<span class="go">打开 →</span>
+			</div>
+		</a>
+
+		<!-- ============ 方案 4 ============ -->
+		<a class="opt" href="demo-4-bento.html" target="_blank">
+			<div class="opt-head">
+				<span class="opt-no">4</span>
+				<span class="opt-name">磁贴工作台</span>
+				<span class="opt-tag">空间感</span>
+			</div>
+			<div class="opt-desc">
+				卡片变成有厚度感的磁贴（Bento），顶栏与输入区做成浮动小岛，历史收成抽屉。视觉最新，也最自由。
+			</div>
+			<div class="thumb-box">
+				<div class="mini m4">
+					<i></i><i></i><i></i><i></i>
+				</div>
+			</div>
+			<div class="opt-points">
+				<div class="pt">磁贴宽度可拖、双击复位，并实时显示当前像素宽度</div>
+				<div class="pt">可指定「主模型」磁贴，给更宽的版位</div>
+				<div class="pt">输入区悬浮，长会话滚动时不会被顶走</div>
+				<div class="pt">历史抽屉默认收起，不再长期占宽</div>
+			</div>
+			<div class="opt-foot">
+				<span>适合：想要现代感 / 自定义布局</span>
+				<span class="go">打开 →</span>
+			</div>
+		</a>
+
+		<!-- ============ 方案 5 ============ -->
+		<a class="opt" href="demo-5-compact.html" target="_blank">
+			<div class="opt-head">
+				<span class="opt-no">5</span>
+				<span class="opt-name">紧凑对比表</span>
+				<span class="opt-tag">高密度</span>
+			</div>
+			<div class="opt-desc">
+				字号更小、间距更紧，行 = 轮次、列 = 模型，左侧问题列固定。目标是一屏看 8 个模型 × 多轮。
+			</div>
+			<div class="thumb-box">
+				<div class="mini m5">
+					<div class="tr head"><i></i><i></i><i></i><i></i><i></i></div>
+					<div class="tr"><i></i><i></i><i></i><i></i><i></i></div>
+					<div class="tr"><i></i><i></i><i></i><i></i><i></i></div>
+					<div class="tr"><i></i><i></i><i></i><i></i><i></i></div>
+					<div class="tr"><i></i><i></i><i></i><i></i><i></i></div>
+				</div>
+			</div>
+			<div class="opt-points">
+				<div class="pt">左侧问题列吸左，横向滚动时始终知道这行问的是什么</div>
+				<div class="pt">单元格默认截断 + 淡出，点一下展开全文</div>
+				<div class="pt">状态用颜色底 + 状态点表达，扫一眼就知道结果</div>
+				<div class="pt">工具栏可切「紧凑 / 舒适」两档密度</div>
+			</div>
+			<div class="opt-foot">
+				<span>适合：模型多、快速扫差异</span>
+				<span class="go">打开 →</span>
+			</div>
+		</a>
+
+	</div>
+
+	<!-- ============ 共用改进 ============ -->
+	<div class="sec-title">5 个方案共用的改进点</div>
+
+	<div class="grid2">
+		<div class="imp">
+			<h4><span class="ic">◐</span>建立色彩与层级体系</h4>
+			<p>现在是「靠边框区分一切」。改成三级表面（主区 / 卡片 / 浮层）+ 三级文字，
+			并且给每个模型分配一个固定颜色，卡片、标签、列头、状态点统一使用，扫视成本大幅下降。</p>
+		</div>
+		<div class="imp">
+			<h4><span class="ic">◱</span>状态可视化</h4>
+			<p>等待中 / 生成中 / 完成 / 失败 / 已取消，统一为「颜色点 + 文案 + 耗时」，
+			生成中带脉冲动画、失败用红色描边，不再依赖纯文字。</p>
+		</div>
+		<div class="imp">
+			<h4><span class="ic">⇣</span>拆分两个语义</h4>
+			<p>「参与对比」（是否提问）与「显示结果」（是否展示）目前是两条长得很像的勾选栏，容易混。
+			每个方案里都用不同控件（开关 / 眼睛图标 / 收起列）把它们明确区分开。</p>
+		</div>
+		<div class="imp">
+			<h4><span class="ic">⌨</span>输入区升级</h4>
+			<p>输入框给足高度、聚焦时描边高亮，附件缩略图带删除角标，
+			发送 / 停止位置固定，右侧显示「本轮几个模型参与」这类即时反馈。</p>
+		</div>
+		<div class="imp">
+			<h4><span class="ic">☰</span>历史会话重做</h4>
+			<p>加搜索框、当前会话高亮、轮次徽标；删除仍是两段式但视觉更克制。
+			条目之间用留白而非分割线，列表不再显得拥挤。</p>
+		</div>
+		<div class="imp">
+			<h4><span class="ic">◫</span>空状态与错误态</h4>
+			<p>错误给出「错误码 + 处理建议 + 重试按钮」；不支持图片的提示降级为浅色提示条；
+			空会话给出可操作的上手指引，而不是一段说明文字。</p>
+		</div>
+	</div>
+
+	<!-- ============ 功能覆盖对照 ============ -->
+	<div class="sec-title">功能覆盖对照（一个都不能少）</div>
+
+	<table class="map">
+		<thead>
+			<tr>
+				<th>原功能</th>
+				<th>方案 1 工作台</th>
+				<th>方案 2 网格</th>
+				<th>方案 3 聚焦</th>
+				<th>方案 4 磁贴</th>
+				<th>方案 5 表格</th>
+			</tr>
+		</thead>
+		<tbody>
+			<tr>
+				<td>参与对比（发给谁）</td>
+				<td>右侧开关列表</td>
+				<td>顶部胶囊标签</td>
+				<td>右侧栏 + 分段控件</td>
+				<td>浮动顶栏圆点</td>
+				<td>工具栏小方块</td>
+			</tr>
+			<tr>
+				<td>显示结果（只看谁）</td>
+				<td>左侧眼睛图标</td>
+				<td>收起整列</td>
+				<td>隐藏则该选项卡变淡</td>
+				<td>顶栏圆点亮灭</td>
+				<td>该列整体变暗</td>
+			</tr>
+			<tr>
+				<td>多轮上下文</td>
+				<td class="yes">轮次分组</td>
+				<td class="yes">每轮一行</td>
+				<td class="yes">带前后轮导航</td>
+				<td class="yes">按轮次堆叠</td>
+				<td class="yes">一行一轮</td>
+			</tr>
+			<tr>
+				<td>复制单条回答</td>
+				<td class="yes">卡片右上</td>
+				<td class="yes">列头 + 格底</td>
+				<td class="yes">标题栏</td>
+				<td class="yes">磁贴右上</td>
+				<td class="yes">列头 + 格底</td>
+			</tr>
+			<tr>
+				<td>重新生成单条</td>
+				<td class="yes">卡片右上</td>
+				<td class="yes">格底重试</td>
+				<td class="yes">标题栏</td>
+				<td class="yes">磁贴右上</td>
+				<td class="yes">失败格重试</td>
+			</tr>
+			<tr>
+				<td>拖动改卡片宽度</td>
+				<td class="mid">自动换行，不需要</td>
+				<td class="yes">列宽拖拽</td>
+				<td class="mid">限宽阅读</td>
+				<td class="yes">磁贴拖拽 + 宽度角标</td>
+				<td class="mid">固定列宽</td>
+			</tr>
+			<tr>
+				<td>Markdown 渲染</td>
+				<td class="yes">完整</td>
+				<td class="yes">完整</td>
+				<td class="yes">完整（最舒适）</td>
+				<td class="yes">完整</td>
+				<td class="yes">完整（更紧凑）</td>
+			</tr>
+			<tr>
+				<td>图片输入 / 缩略图</td>
+				<td class="yes">输入区</td>
+				<td class="yes">输入区</td>
+				<td class="yes">输入区</td>
+				<td class="yes">输入区</td>
+				<td class="yes">输入区</td>
+			</tr>
+			<tr>
+				<td>历史会话侧栏</td>
+				<td class="yes">独立栏 + 搜索</td>
+				<td class="mid">按钮唤出</td>
+				<td class="mid">按钮唤出</td>
+				<td class="yes">右侧抽屉 + 搜索</td>
+				<td class="mid">按钮唤出</td>
+			</tr>
+			<tr>
+				<td>错误码中文化</td>
+				<td class="yes">卡片内提示块</td>
+				<td class="yes">格内提示块</td>
+				<td class="yes">整页错误态</td>
+				<td class="yes">提示块</td>
+				<td class="yes">提示块 + 重试</td>
+			</tr>
+			<tr>
+				<td>最多模型数</td>
+				<td class="mid">4~6 个舒适</td>
+				<td class="yes">6~8 个</td>
+				<td class="yes">8 个以上</td>
+				<td class="mid">4~6 个</td>
+				<td class="yes">8 个以上（滚动）</td>
+			</tr>
+		</tbody>
+	</table>
+
+	<div class="sec-title">怎么选</div>
+	<div class="grid2">
+		<div class="imp">
+			<h4>只想让现在这版变好看</h4>
+			<p>选<strong>方案 1</strong>。结构改动最小，主要是把两条勾选栏挪走 + 换配色与卡片样式，落地成本最低。</p>
+		</div>
+		<div class="imp">
+			<h4>最在意「对比」这件事</h4>
+			<p>选<strong>方案 2</strong>。列头吸顶 + 等宽对齐，是 5 个里唯一能真正做到「横向逐条对照」的布局。</p>
+		</div>
+		<div class="imp">
+			<h4>模型多、回答长</h4>
+			<p>选<strong>方案 3</strong> 或 <strong>5</strong>。3 适合细读，5 适合快速扫描，两者可以共存（视图切换）。</p>
+		</div>
+		<div class="imp">
+			<h4>想要眼前一亮</h4>
+			<p>选<strong>方案 4</strong>。代价是交互最多（浮动层、抽屉），实现与调试成本也最高。</p>
+		</div>
+	</div>
+
+	<p style="margin-top:36px;color:var(--fg-3);font-size:12.5px;line-height:1.8">
+		说明：以上都是静态演示页，不含真实请求逻辑；示例内容取自现有会话截图。
+		选定方案后，我可以把它落到 <span class="badge mono">media/style.css</span> + <span class="badge mono">media/main.js</span>（必要时少量改动 <span class="badge mono">chatPanel.ts</span> 的 HTML 骨架）。
+	</p>
+
+</div>
+
+<script>
+	// 点页面空白处双击切深浅色，方便对比两套配色
+	document.querySelector('.hero h1').addEventListener('dblclick', function () {
+		var r = document.documentElement;
+		r.dataset.theme = r.dataset.theme === 'dark' ? 'light' : 'dark';
+	});
+</script>
+</body>
+</html>
