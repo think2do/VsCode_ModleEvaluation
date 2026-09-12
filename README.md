@@ -467,13 +467,13 @@ open scripts/preview.html          # macOS
 │   ├── markdown.js       # Markdown 渲染器（零依赖，可单独测试）
 │   ├── main.js           # Webview 前端逻辑（渲染、选项卡/悬浮条、图片、历史、拖拽）
 │   └── style.css         # 界面样式（跟随 VS Code 主题变量）
-├── demos/                # 界面方案 Demo（静态网页，当初选方案用），共享 shared.css
 ├── scripts/
 │   ├── smoke-render.mjs  # 离线冒烟测试（npm test）
 │   ├── install-local.mjs # 本地安装 / 卸载到 ~/.vscode/extensions
 │   ├── package-vsix.mjs  # 手工打包 .vsix（零依赖，不用 vsce）
 │   └── preview.html      # 开发用界面预览页（浏览器里直接看 UI）
 ├── docs/
+│   ├── design/           # 界面方案 Demo（当初选方案用的静态网页，共享 shared.css）
 │   ├── 多模型对比对话插件需求文档.md
 │   └── 给朋友的安装说明.md    # 打包时复制到 dist/，随 vsix 一起发
 ├── dist/                 # 打包产物（npm run package:vsix，已 gitignore）
