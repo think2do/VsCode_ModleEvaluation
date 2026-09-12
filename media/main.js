@@ -41,10 +41,12 @@
 		models: [],
 		/** 参与对比的模型（决定请求发给谁）：由悬浮条上每张卡片的开关控制 */
 		selected: new Set(),
-		/** 加入了并排对比的模型（只影响怎么看）：由悬浮条卡片左侧的复选框控制。
-		 *  非空时会话区进「并排对比」，只看这几个；空时回到单模型聚焦阅读。 */
-		compare: new Set(),
-		/** turnId -> { focusKey, compare: Set } */
+		/**
+		 * turnId -> { focusKey, compare: Set }
+		 *
+		 * 每轮的展示设置 —— 「显示哪个模型」与「并排对比哪几个」都只认这里，
+		 * 不再另存一份全局状态（两份状态各被读一半，正是悬浮条上点了没反应的原因）。
+		 */
 		turnViews: new Map(),
 		session: { id: '', title: '', selectedModels: [], turns: [] },
 		sessions: [],
@@ -177,38 +179,73 @@
 	}
 
 	/**
-	 * 保证有一个可读的聚焦模型。
-	 * 优先沿用当前选择；失效时回落到最新一轮的第一个模型，再退回列表里的第一个。
+	 * 修正「最新一轮」的聚焦模型。
+	 *
+	 * 优先沿用该轮已有的选择；选中的模型不在本轮、或已经不可见时，回落到本轮
+	 * 第一个问过的模型，再退回列表里的第一个 —— 否则这一轮会只剩一句
+	 * 「本轮未向 X 提问」，看起来像坏了。
 	 */
 	function ensureFocusKey() {
 		const available = visibleKeys();
-		if (state.focusKey && available.includes(state.focusKey)) {
+		const last = latestTurn();
+		if (!last) {
 			return;
 		}
-		const last = latestTurn();
-		const lastKeys = last ? Object.keys(last.responses || {}) : [];
-		state.focusKey = lastKeys.find((key) => available.includes(key)) || available[0] || '';
+		const view = viewForTurn(last.id);
+		const asked = Object.keys(last.responses || {});
+		view.focusKey =
+			(asked.includes(view.focusKey) && available.includes(view.focusKey) ? view.focusKey : '') ||
+			asked.find((key) => available.includes(key)) ||
+			available[0] ||
+			'';
 	}
 
-	/** 点卡片正文 = 单模型阅读这个模型（并排对比会因此退出）。 */
+	/**
+	 * 悬浮条是「最新一轮」的快捷控制条 —— 它左侧的复选框与卡片正文都写进
+	 * **最新一轮**的展示设置（`turn.view`），不另开一份全局状态。
+	 *
+	 * 早先这里存过一份全局的 `state.compare` / `state.focusKey`，但真正决定布局
+	 * 的是每轮的 `turn.view`，两份状态各被读一半，结果就是「点了悬浮条除了打钩
+	 * 什么都没变」。现在统一到 `turn.view` 这一个真相源上。
+	 *
+	 * 还没有任何轮次时返回 null（此时悬浮条上的控件本就不可用）。
+	 */
+	function latestViewInfo() {
+		const last = latestTurn();
+		return last ? { turnId: last.id, view: viewForTurn(last.id) } : null;
+	}
+
+	/**
+	 * 点悬浮条的卡片正文 = 单模型阅读这个模型（并排对比会因此退出）。
+	 *
+	 * 作用于**最新一轮**：悬浮条是「现在」的控制条；历史轮次各自的看法由那一轮
+	 * 的选项卡控制。卡片正文上的模型名走的是 `setTurnFocus`，因为那里天然知道
+	 * 自己属于哪一轮。
+	 */
 	function setFocus(key) {
 		if (!key) {
 			return;
 		}
-		// 单读和并排是两种互斥的看*法*：进入单读要清掉并排勾选，
-		// 否则"点了卡片却什么都没变"，会让人以为点击失效。
-		const wasCompare = isCompareMode();
-		state.compare.clear();
-		if (key === state.focusKey && !wasCompare) {
+		const info = latestViewInfo();
+		if (!info) {
 			return;
 		}
-		state.focusKey = key;
+		// 单读和并排是两种互斥的看*法*：进入单读要清掉并排勾选，
+		// 否则"点了卡片却什么都没变"，会让人以为点击失效。
+		const wasCompare = info.view.compare.size > 0;
+		info.view.compare.clear();
+		if (key === info.view.focusKey && !wasCompare) {
+			return;
+		}
+		info.view.focusKey = key;
+		saveTurnView(info.turnId);
 		applyVisibility();
 	}
 
-	/** 是否处于「并排对比」：勾了至少一个左复选框。 */
+	/** 是否处于「并排对比」：最新一轮勾了至少一个左复选框。 */
 	function isCompareMode() {
-		return state.compare.size > 0;
+		const info = latestViewInfo();
+		return !!info && info.view.compare.size > 0;
 	}
 
 	/**
@@ -216,11 +253,16 @@
 	 * 只影响**怎么展示**，和「是否参与提问」无关。
 	 */
 	function setCompare(key, on) {
-		if (on) {
-			state.compare.add(key);
-		} else {
-			state.compare.delete(key);
+		const info = latestViewInfo();
+		if (!info) {
+			return;
 		}
+		if (on) {
+			info.view.compare.add(key);
+		} else {
+			info.view.compare.delete(key);
+		}
+		saveTurnView(info.turnId);
 		applyVisibility();
 	}
 
@@ -236,25 +278,9 @@
 		vscode.postMessage({ type: 'selectModels', selected: Array.from(state.selected) });
 	}
 
-	/** 模型在列表里的下标，用来给并排的格子排序（flex 的 order 属性）。 */
-	function modelOrder(key) {
-		const index = state.models.findIndex((m) => m.key === key);
-		return index < 0 ? 999 : index;
-	}
-
-	/** 当前并排对比的模型，按模型列表顺序。 */
-	function compareKeys() {
-		return state.models.filter((m) => state.compare.has(m.key)).map((m) => m.key);
-	}
-
 	/**
-	 * 统一刷新「谁可见、谁是当前项」。
-	 *
-	 * 两种展示方式：
-	 * - **并排对比**（勾了左复选框）：每一轮同时列出被勾选的那几个模型，横向排开；
-	 * - **单模型阅读**（没勾）：只显示当前聚焦模型的回答。
-	 *
-	 * 右侧开关只决定"是否提问"，不影响能不能看它已有的回答。
+	 * 记住滚动位置：重排前抓一个「锚点」轮次，重排后把它的相对偏移还原回去。
+	 * 否则切换聚焦模型 / 进出并排时，视口会莫名其妙跳走。
 	 */
 	function captureScrollAnchor() {
 		const containerRect = el.messages.getBoundingClientRect();
@@ -313,11 +339,19 @@
 		applyVisibility();
 	}
 
+	/**
+	 * 统一刷新「谁可见、谁是当前项」。
+	 *
+	 * 两种展示方式是**按轮**的（每轮各自记住自己的看法）：
+	 * - **并排对比**（该轮勾了左复选框）：同时列出被勾选的那几个模型，横向排开；
+	 * - **单模型阅读**（没勾）：只显示该轮聚焦模型的回答。
+	 *
+	 * 右侧开关只决定「是否提问」，不影响能不能看它已有的回答。
+	 */
 	function applyVisibility() {
 		const scrollAnchor = captureScrollAnchor();
 		const previousOverflowAnchor = el.messages.style.overflowAnchor;
 		el.messages.style.overflowAnchor = 'none';
-		el.app.classList.remove('compare');
 
 		for (const [turnId, info] of state.turnEls) {
 			const turn = turnById(turnId);
@@ -333,7 +367,14 @@
 			}
 			for (const tab of info.tabbar.querySelectorAll('.tab')) {
 				const key = tab.dataset.key;
-				tab.classList.toggle('on', compare ? view.compare.has(key) : key === view.focusKey);
+				const inCompare = view.compare.has(key);
+				tab.classList.toggle('on', compare ? inCompare : key === view.focusKey);
+				// 选项卡上的复选框也要跟着状态走：否则「点了卡片名退出并排」之后
+				// 复选框还停在勾选态，再点一次反而被当成取消勾选，要点两下才有反应。
+				const box = tab.querySelector('.tab-check');
+				if (box) {
+					box.checked = inCompare;
+				}
 			}
 			for (const stale of Array.from(info.cards.querySelectorAll('.tile-missing'))) stale.remove();
 			if (compare && turn) {
@@ -357,11 +398,6 @@
 		});
 	}
 
-	function focusModelName() {
-		const model = state.models.find((m) => m.key === state.focusKey);
-		return model ? modelLabel(model) : state.focusKey;
-	}
-
 	/**
 	 * 顶部悬浮条：列出**全部**可见模型。
 	 *
@@ -375,6 +411,9 @@
 		const list = state.models;
 		el.stripList.textContent = '';
 		state.minis.clear();
+		// 悬浮条只反映最新一轮的并排勾选（它就是这个看法的最新状态）
+		const latest = latestViewInfo();
+		const comparing = latest ? latest.view.compare : new Set();
 
 		for (const model of list) {
 			const mini = document.createElement('div');
@@ -387,7 +426,7 @@
 			const compareBox = document.createElement('input');
 			compareBox.type = 'checkbox';
 			compareBox.disabled = !hasAnyTurn();
-			compareBox.checked = state.compare.has(model.key);
+			compareBox.checked = comparing.has(model.key);
 			compareBox.addEventListener('change', () => setCompare(model.key, compareBox.checked));
 			compareLabel.appendChild(compareBox);
 			compareLabel.title = hasAnyTurn()
@@ -500,14 +539,17 @@
 	}
 
 	function renderStripActive() {
-		const compare = isCompareMode();
+		const info = latestViewInfo();
+		const compare = !!info && info.view.compare.size > 0;
+		const focus = info ? info.view.focusKey : '';
 		const hasTurn = hasAnyTurn();
 		for (const [key, mini] of state.minis) {
-			mini.root.classList.toggle('active', !compare && key === state.focusKey);
+			const comparing = !!info && info.view.compare.has(key);
+			mini.root.classList.toggle('active', !compare && key === focus);
 			mini.root.classList.toggle('off', !state.selected.has(key));
-			mini.root.classList.toggle('comparing', state.compare.has(key));
+			mini.root.classList.toggle('comparing', comparing);
 			mini.checkbox.checked = state.selected.has(key);
-			mini.compareBox.checked = state.compare.has(key);
+			mini.compareBox.checked = comparing;
 			// 还没有任何回答时，没有内容可比，复选框置灰
 			mini.compareBox.disabled = !hasTurn;
 		}
@@ -950,7 +992,8 @@
 		name.className = 'card-name';
 		name.textContent = model ? modelLabel(model) : key;
 		name.title = key;
-		name.addEventListener('click', () => setFocus(key));
+		// 作用于这一张卡片所属的那一轮，不是「最新一轮」
+		name.addEventListener('click', () => setTurnFocus(turnId, key));
 
 		const copy = document.createElement('button');
 		copy.className = 'card-copy';
@@ -1417,9 +1460,9 @@
 			case 'session':
 				state.session = message.session;
 				state.sessions = message.sessions || [];
-				// 勾选状态以会话里记录的为准；并排对比不跨会话保留
+				// 勾选状态以会话里记录的为准；各轮的展示设置由 renderSession 从该会话
+				// 自己的 turn.view 重建，所以不会把上一个会话的看法带过来。
 				state.selected = new Set(message.session.selectedModels || []);
-				state.compare.clear();
 				renderSession();
 				renderSessions();
 				setSending(false);
@@ -1435,14 +1478,8 @@
 				state.session.turns.push(message.turn);
 				renderSessionHeader();
 				appendTurn(message.turn, true);
-				// 新的一轮里没有当前聚焦的模型时，跟着切到本轮的第一个模型，
-				// 否则新的一轮会只剩一句「本轮未向 X 提问」。
-				if (state.focusKey && !(message.turn.responses || {})[state.focusKey]) {
-					const keys = Object.keys(message.turn.responses || {});
-					if (keys.length) {
-						state.focusKey = keys[0];
-					}
-				}
+				// 新的一轮若没问过当前聚焦的模型，ensureFocusKey 会切到本轮问过的
+				// 第一个模型，否则这一轮会只剩一句「本轮未向 X 提问」。
 				ensureFocusKey();
 				applyVisibility();
 				// 已经有回答了，左复选框从此刻起可用

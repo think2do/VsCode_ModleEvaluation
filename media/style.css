@@ -922,11 +922,11 @@ body.resizing * {
 }
 
 /* 并排对比时，点卡片上的模型名 = 退出并排、单读它 */
-#app.compare .card-name {
+.turn.tile .card-name {
 	cursor: pointer;
 }
 
-#app.compare .card-name:hover {
+.turn.tile .card-name:hover {
 	color: var(--accent);
 	text-decoration: underline;
 }
@@ -1069,12 +1069,16 @@ body.resizing * {
  * 每格高度一致（内容超出时格内纵向滚动），这样各格顶部对齐、便于逐条对比。
  */
 
-/* 并排时对话区用满宽度，不再受 880px 阅读栏限制 */
-#app.compare .q-row,
-#app.compare .tabbar,
-#app.compare .cards,
-#app.compare .answers-label,
-#app.compare .turn {
+/* 并排时对话区用满宽度，不再受 880px 阅读栏限制。
+ *
+ * 注意是**按轮**生效：进入并排时 `applyVisibility()` 会给那一轮加 `.tile`，
+ * 而不是给整个 #app 加类 —— 各轮的展示设置本来就是互相独立的，某一轮在
+ * 并排阅读时，不想连带把其它单读轮次的阅读宽度也改掉。 */
+.turn.tile,
+.turn.tile .q-row,
+.turn.tile .tabbar,
+.turn.tile .cards,
+.turn.tile .answers-label {
 	max-width: none;
 }
 
@@ -1137,7 +1141,7 @@ body.resizing * {
 }
 
 /* 并排时单模型那套「模型回答」小标题会重复，收掉 */
-#app.compare .answers-label {
+.turn.tile .answers-label {
 	display: none;
 }
 
