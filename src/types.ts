@@ -71,7 +71,7 @@ export interface Turn {
 export type WireTurn = Omit<Turn, 'images'> & { images: WireImage[] };
 
 /** 一次完整会话。 */
-	export interface Session {
+export interface Session {
 	id: string;
 	/** 取自首条提问，仅用于列表展示 */
 	title: string;

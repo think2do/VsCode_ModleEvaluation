@@ -4,5 +4,8 @@ dist/
 *.vsix
 .DS_Store
 
+# package-vsix.mjs 的打包暂存目录（正常会自己清理，中途失败时会残留）
+.vsix-stage/
+
 # 「导入到 Copilot」在打开的工程里生成的对话上下文文件
 .multi-model-context/
