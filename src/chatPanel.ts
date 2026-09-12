@@ -265,11 +265,25 @@ export class MultiModelChatPanel {
 					(message as unknown as { turnId?: string; key?: string }).key,
 				);
 				break;
+			case 'editPrompt':
+				await this.handleEditPrompt(
+					message as unknown as { turnId?: string; prompt?: string; regenerate?: boolean },
+				);
+				break;
 			case 'newSession':
 				await this.newSession();
 				break;
 			case 'selectModels':
 				await this.handleSelectModels((message as unknown as { selected?: string[] }).selected ?? []);
+				break;
+			case 'setContext':
+				await this.handleSetContext(message as unknown as { turnId?: string; key?: string });
+				break;
+			case 'clearContext':
+				await this.handleClearContext();
+				break;
+			case 'updateTurnView':
+				await this.handleUpdateTurnView(message as unknown as { turnId?: string; view?: Turn['view'] });
 				break;
 			case 'loadSession':
 				await this.handleLoadSession((message as unknown as { id?: string }).id);
@@ -346,6 +360,48 @@ export class MultiModelChatPanel {
 
 	private async handleSelectModels(selected: string[]): Promise<void> {
 		this.session.selectedModels = selected;
+		this.session.updatedAt = Date.now();
+		await this.store.save(this.session);
+	}
+
+	private async handleSetContext(message: { turnId?: string; key?: string }): Promise<void> {
+		if (!message.turnId || !message.key) {
+			return;
+		}
+		const turn = this.session.turns.find((candidate) => candidate.id === message.turnId);
+		const response = turn?.responses[message.key];
+		if (!turn || !response || response.status !== 'done' || !response.text.trim()) {
+			this.post({ type: 'notice', level: 'warn', message: '只有已完成且有内容的回答可以设为上下文。' });
+			return;
+		}
+		this.session.contextSource = { turnId: turn.id, modelKey: message.key };
+		this.session.updatedAt = Date.now();
+		await this.store.save(this.session);
+		await this.postSession();
+	}
+
+	private async handleClearContext(): Promise<void> {
+		if (!this.session.contextSource) {
+			return;
+		}
+		delete this.session.contextSource;
+		this.session.updatedAt = Date.now();
+		await this.store.save(this.session);
+		await this.postSession();
+	}
+
+	private async handleUpdateTurnView(message: { turnId?: string; view?: Turn['view'] }): Promise<void> {
+		if (!message.turnId || !message.view) {
+			return;
+		}
+		const turn = this.session.turns.find((candidate) => candidate.id === message.turnId);
+		if (!turn) {
+			return;
+		}
+		turn.view = {
+			focusKey: typeof message.view.focusKey === 'string' ? message.view.focusKey : undefined,
+			compareKeys: Array.isArray(message.view.compareKeys) ? [...new Set(message.view.compareKeys)] : [],
+		};
 		this.session.updatedAt = Date.now();
 		await this.store.save(this.session);
 	}
@@ -458,18 +514,115 @@ export class MultiModelChatPanel {
 		if (!model || !turn.responses[key]) {
 			return;
 		}
-		const response = turn.responses[key];
-		response.text = '';
-		response.status = 'pending';
-		delete response.error;
-		delete response.elapsedMs;
-		delete response.droppedImages;
-		this.post({ type: 'reset', turnId, key });
+		this.resetResponse(turn, key);
 		await this.store.save(this.session);
 		await this.runModel(turn, model);
 		this.session.updatedAt = Date.now();
 		await this.store.save(this.session);
 		await this.sendSessions();
+	}
+
+	/**
+	 * 编辑某一轮的提问。
+	 *
+	 * 只允许改**最新一轮**：历史轮次被改写后，后续轮次会回放「新提问 + 旧回答」，
+	 * 上下文自相矛盾，所以宁可不支持。
+	 *
+	 * `regenerate` 为 `true` 时，把该轮**原有**的每个模型回答清空后并发重发 ——
+	 * 以该轮 `responses` 里已有的 key 为准，不受之后开关变化影响。
+	 */
+	private async handleEditPrompt(message: {
+		turnId?: string;
+		prompt?: string;
+		regenerate?: boolean;
+	}): Promise<void> {
+		const turnId = message.turnId;
+		if (!turnId) {
+			return;
+		}
+		if (this.running.size > 0) {
+			this.post({ type: 'notice', level: 'warn', message: '正在生成回答，请先停止或等完成后再编辑。' });
+			return;
+		}
+		const turnIndex = this.session.turns.findIndex((candidate) => candidate.id === turnId);
+		const turn = this.session.turns[turnIndex];
+		if (!turn) {
+			return;
+		}
+		if (turnIndex !== this.session.turns.length - 1) {
+			this.post({ type: 'notice', level: 'warn', message: '当前只支持编辑最新一轮提问。' });
+			return;
+		}
+		const prompt = (message.prompt ?? '').trim();
+		if (!prompt && turn.images.length === 0) {
+			this.post({ type: 'notice', level: 'warn', message: '提问内容不能为空。' });
+			return;
+		}
+
+		// 只在内容真的变了的时候才写盘，避免「保存」按钮空点一次也刷新时间
+		if (turn.prompt !== prompt) {
+			turn.prompt = prompt;
+			turn.editedAt = Date.now();
+			if (turnIndex === 0) {
+				this.session.title = prompt.slice(0, 40) || '(图片消息)';
+			}
+			// 共享上下文指向本轮时，那条回答马上要被改写，先摘掉引用
+			if (this.session.contextSource?.turnId === turnId) {
+				delete this.session.contextSource;
+			}
+			this.session.updatedAt = Date.now();
+			await this.store.save(this.session);
+			// 轻量刷新：只更新这一轮的提问区，不整屏重渲染（免得丢掉并排对比状态）
+			this.post({
+				type: 'prompt',
+				turnId,
+				prompt,
+				editedAt: turn.editedAt,
+				title: this.session.title,
+				// 显式给 null：webview 的 postMessage 会丢掉值为 undefined 的字段，
+				// 用 null 才能把「上下文已被清除」这件事传过去
+				contextSource: this.session.contextSource ?? null,
+			});
+			await this.sendSessions();
+		}
+
+		if (!message.regenerate) {
+			return;
+		}
+
+		const models = Object.keys(turn.responses)
+			.map((key) => this.models.find((candidate) => keyOf(candidate) === key))
+			.filter((candidate): candidate is vscode.LanguageModelChat => !!candidate);
+		if (models.length === 0) {
+			this.post({ type: 'notice', level: 'warn', message: '本轮没有可重新提问的模型。' });
+			return;
+		}
+		for (const model of models) {
+			this.resetResponse(turn, keyOf(model));
+		}
+		await this.store.save(this.session);
+		await Promise.all(models.map((model) => this.runModel(turn, model)));
+		this.session.updatedAt = Date.now();
+		await this.store.save(this.session);
+		await this.sendSessions();
+		this.post({ type: 'idle' });
+	}
+
+	/**
+	 * 把某个模型在某轮的应答清空为「等待中」，并通知界面重置对应卡片。
+	 * 「重新生成」与「编辑后重发」共用这一段。
+	 */
+	private resetResponse(turn: Turn, key: string): void {
+		const response = turn.responses[key];
+		if (!response) {
+			return;
+		}
+		response.text = '';
+		response.status = 'pending';
+		delete response.error;
+		delete response.elapsedMs;
+		delete response.droppedImages;
+		this.post({ type: 'reset', turnId: turn.id, key });
 	}
 
 	private async runModel(turn: Turn, model: vscode.LanguageModelChat): Promise<void> {
@@ -601,6 +754,19 @@ export class MultiModelChatPanel {
 				supportsImages && !answer.droppedImages ? await this.loadImages(past.images) : [];
 			messages.push(vscode.LanguageModelChatMessage.User(this.buildParts(past.prompt, pastImages)));
 			messages.push(vscode.LanguageModelChatMessage.Assistant(answer.text));
+		}
+
+		const source = this.session.contextSource;
+		if (source) {
+			const sourceTurn = this.session.turns.find((candidate) => candidate.id === source.turnId);
+			const sourceResponse = sourceTurn?.responses[source.modelKey];
+			if (sourceResponse?.status === 'done' && sourceResponse.text.trim()) {
+				messages.push(
+					vscode.LanguageModelChatMessage.Assistant(
+						`【被选中的模型回答】\n${sourceResponse.text}`,
+					),
+				);
+			}
 		}
 
 		messages.push(vscode.LanguageModelChatMessage.User(this.buildParts(turn.prompt, currentImages)));

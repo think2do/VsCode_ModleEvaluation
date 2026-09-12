@@ -115,5 +115,42 @@
 </script>
 <script src="../media/markdown.js"></script>
 <script src="../media/main.js"></script>
+<script>
+	// ── 演示数据（只为在浏览器里试「编辑提问」，删掉这段就是一个空白新会话）──
+	// main.js 启动时会发 ready，这里直接替扩展侧回应 models / session。
+	(function () {
+		const models = [
+			{ key: 'customendpoint:6-Astra', id: '6-Astra', vendor: 'customendpoint', family: 'astra', name: '6-Astra', maxInputTokens: 200000 },
+			{ key: 'customendpoint:V4.1-Flash', id: 'V4.1-Flash', vendor: 'customendpoint', family: 'flash', name: 'V4.1-Flash', maxInputTokens: 200000 },
+			{ key: 'customendpoint:5.6-Sol', id: '5.6-Sol', vendor: 'customendpoint', family: 'sol', name: '5.6-Sol', maxInputTokens: 200000 },
+		];
+		const turn = {
+			id: 'demo-turn-1',
+			at: Date.now(),
+			prompt: '解释一下快速排序',
+			images: [],
+			responses: {
+				'customendpoint:6-Astra': { text: '快速排序是分治算法……', status: 'done', elapsedMs: 4100 },
+				'customendpoint:V4.1-Flash': { text: '它把数组分成两部分……', status: 'done', elapsedMs: 3200 },
+				'customendpoint:5.6-Sol': { text: '（这一条用来试编辑）', status: 'done', elapsedMs: 5100 },
+			},
+		};
+		window.__emit({ type: 'models', models, selected: models.map((m) => m.key), warning: '' });
+		window.__emit({
+			type: 'session',
+			session: {
+				id: 'demo-session',
+				title: '解释一下快速排序',
+				selectedModels: models.map((m) => m.key),
+				turns: [turn],
+			},
+			sessions: [],
+		});
+		// 点「仅保存 / 保存并重新生成」后，前端会把 editPrompt 记在 window.__sent 里。
+		// 想模拟扩展侧回推，可在控制台执行：
+		//   __emit({ type: 'prompt', turnId: 'demo-turn-1', prompt: '改过的文字',
+		//            editedAt: Date.now(), title: '改过的文字', contextSource: null })
+	})();
+</script>
 </body>
 </html>

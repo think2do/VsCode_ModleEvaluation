@@ -3,3 +3,6 @@ out/
 dist/
 *.vsix
 .DS_Store
+
+# 「导入到 Copilot」在打开的工程里生成的对话上下文文件
+.multi-model-context/

@@ -636,6 +636,93 @@ body.resizing * {
 	word-break: break-word;
 }
 
+/* 提问区头部：「你的提问」标签在左，「编辑」按钮在右 */
+.q-bar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+}
+
+/* 平时低对比度但可点，鼠标移上或键盘聚焦时高亮（不藏起来，否则点不到） */
+.q-actions {
+	margin-left: auto;
+	display: flex;
+	gap: 6px;
+}
+
+.q-edit {
+	padding: 2px 8px;
+	border: 1px solid transparent;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--fg-3);
+	font: inherit;
+	font-size: 0.86em;
+	cursor: pointer;
+	white-space: nowrap;
+	transition: color 0.12s, border-color 0.12s;
+}
+
+.q-edit:hover:not(:disabled),
+.q-edit:focus-visible {
+	color: var(--accent);
+	border-color: var(--accent);
+}
+
+.q-edit:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+/* 「已编辑」小标记 */
+.q-edited {
+	font-size: 0.72em;
+	letter-spacing: 0.04em;
+	color: var(--fg-3);
+}
+
+/* ---------- 编辑提问（仅最新一轮） ---------- */
+
+.q-edit-area {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	width: 100%;
+}
+
+.q-edit-input {
+	width: 100%;
+	min-height: 3.4em;
+	box-sizing: border-box;
+	resize: vertical;
+	font-family: inherit;
+	font-size: 1.08em;
+	font-weight: 600;
+	line-height: 1.5;
+	padding: 7px 9px;
+	color: var(--vscode-input-foreground, var(--fg-2));
+	background: var(--vscode-input-background, var(--bg-2));
+	border: 1px solid var(--vscode-input-border, var(--line-2));
+	border-radius: 4px;
+}
+
+.q-edit-input:focus {
+	outline: none;
+	border-color: var(--accent);
+}
+
+.q-edit-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.q-edit-tip {
+	font-size: 0.82em;
+	color: var(--fg-3);
+}
+
 /* 「模型回答」小标题，给回答区一个明确的起点 */
 .answers-label {
 	display: flex;
@@ -721,6 +808,13 @@ body.resizing * {
 .tab.muted:hover,
 .tab.muted.on {
 	opacity: 1;
+}
+
+.tab-check {
+	margin: 0;
+	width: 13px;
+	height: 13px;
+	accent-color: var(--c, var(--accent));
 }
 
 .tab .nm {
@@ -1371,4 +1465,10 @@ body.resizing * {
 	max-height: 92vh;
 	border-radius: 6px;
 	box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
+}
+
+.context-badge {
+	max-width: 280px;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }

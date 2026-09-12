@@ -2,7 +2,7 @@
   "name": "multi-model-compare",
   "displayName": "多模型对比对话",
   "description": "在独立面板里把同一个问题同时发给多个大模型，流式对比它们的回答，支持多轮追问、图片输入与本地历史。",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "publisher": "local",
   "private": true,
   "license": "MIT",

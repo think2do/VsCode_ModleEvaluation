@@ -57,15 +57,21 @@ export interface Turn {
 	/** 时间戳 */
 	at: number;
 	prompt: string;
+	/** 用户最后一次编辑提问的时间戳（目前只允许编辑最新一轮） */
+	editedAt?: number;
 	images: ImageAttachment[];
-	/** key = ModelRef.key */
+	/** 该轮独立的展示设置；缺省时由前端按上一轮或当前模型推导 */
+	view?: {
+		focusKey?: string;
+		compareKeys?: string[];
+	};
 	responses: Record<string, ModelResponse>;
 }
 
 export type WireTurn = Omit<Turn, 'images'> & { images: WireImage[] };
 
 /** 一次完整会话。 */
-export interface Session {
+	export interface Session {
 	id: string;
 	/** 取自首条提问，仅用于列表展示 */
 	title: string;
@@ -73,6 +79,11 @@ export interface Session {
 	updatedAt: number;
 	/** 上次勾选的模型 key 列表 */
 	selectedModels: string[];
+	/** 后续所有模型共享的单条回答来源 */
+	contextSource?: {
+		turnId: string;
+		modelKey: string;
+	};
 	turns: Turn[];
 }
 

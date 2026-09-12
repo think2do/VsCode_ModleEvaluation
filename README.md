@@ -1,13 +1,71 @@
-# 多模型对比对话（Multi-Model Compare）
+# 多模型对比对话 · Multi-Model Compare
 
-一个 VS Code 扩展：在独立面板里把**同一个问题同时发给多个大模型**，流式对比它们的回答，
-一次读一个模型。支持多轮追问、图片输入与本地历史。
+> 在 VS Code 的独立面板里，把**同一个问题同时发给多个大模型**，流式并排对比它们的回答 ——
+> 支持多轮追问、图片输入与本地历史。
 
-`v0.5.0` · 需求文档：`docs/多模型对比对话插件需求文档.md`
+![VS Code](https://img.shields.io/badge/VS%20Code-%E2%89%A5%201.137.0-007ACC?logo=visualstudiocode&logoColor=white)
+![Version](https://img.shields.io/badge/version-0.8.0-2ea44f)
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Runtime dependencies](https://img.shields.io/badge/runtime%20dependencies-0-brightgreen)
+
+**为什么用它**
+
+- **一次提问，多家并发** —— `Promise.all` 同时发起，各模型独立流式输出，互不阻塞；
+- **换个角度看答案** —— 点模型名**单读**、勾复选框**横向并排**、点选项卡逐轮切换；
+- **上下文各管各的** —— 每个模型只回放自己答完的历史轮次，互不串扰，方便交叉验证；
+- **零运行时依赖** —— 不引入任何运行时 npm 包，界面跟随 VS Code 主题变量；
+- **不碰你的密钥** —— 复用你本机已配置好的模型（Copilot 订阅或自定义端点），扩展**不接触任何 API Key**；
+- **数据留在本地** —— 会话与图片都存在 VS Code `globalStorage` 里，不上传、不同步。
+
+当前版本 **`v0.8.0`** ｜ 需求文档：[`docs/多模型对比对话插件需求文档.md`](docs/多模型对比对话插件需求文档.md)
 
 ---
 
-## 快速开始
+## 快速安装
+
+| 前置条件 | 要求 |
+|----------|------|
+| VS Code | **≥ 1.137.0**（`vscode.lm` 稳定 API 所需） |
+| Node.js | 18+（仅「从源码安装」与开发时需要，本项目在 v24 上验证） |
+| 模型 | 本机已配好至少一个可用模型：Copilot 订阅，或在 `chatLanguageModels.json` 里注册的自定义端点 |
+
+从源码安装（日常使用）：
+
+```bash
+git clone https://github.com/CrazyGoudanli/VsCode_ModleEvaluation.git
+cd VsCode_ModleEvaluation
+npm install
+npm run install:local
+```
+
+装完后**完全退出并重启 VS Code**（macOS `Cmd+Q`），再按 `Cmd+Shift+P` 执行
+**`多模型对比: 打开对比对话面板`**。
+
+> 不想克隆源码？也可以安装打包好的 `.vsix`，或按 `F5` 起一个调试宿主 ——
+> 详见 [安装](#安装) 里的三种方式。
+
+## 目录
+
+- [快速上手](#快速上手)
+- [使用说明](#使用说明)
+- [特性](#特性)
+- [设置项](#设置项)
+- [工作原理](#工作原理)
+- [数据存储](#数据存储)
+- [安装](#安装)
+- [开发](#开发)
+- [项目结构](#项目结构)
+- [已知限制与设计取舍](#已知限制与设计取舍)
+- [排障](#排障)
+- [版本历史](#版本历史)
+- [后续可做](#后续可做)
+- [贡献](#贡献)
+- [许可](#许可)
+
+> 本文快捷键以 **macOS** 为例；Windows / Linux 把 `Cmd` 换成 `Ctrl` 即可，
+> 存储与日志路径见 [数据存储](#数据存储) 与 [排障](#排障)。
+
+## 快速上手
 
 如果扩展**已经装好**了，只要两步：
 
@@ -17,15 +75,13 @@
 顶部悬浮条里每个模型右侧都有一个开关（控制是否提问），打开后就可以在底部输入问题、回车发送。
 拿到回答后，想横向比一比，就勾上卡片**左侧的复选框**。
 
-> 还没装？跳到 [安装](#安装) 一节。
-
 ## 使用说明
 
 ### 界面布局
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ 多模型对比对话  赛博朋克                          [新建会话] [历史]  │
+│ 多模型对比对话  快速排序                          [新建会话] [历史]  │
 ├──────────────────────────────────────────────────────────────────────┤
 │ ☐ ● Sol   2.1s   (o)  ☑ ● Astra  生成中 (o)  ☐ ● Flash  4.8s  (o)   │
 │ ↑左：勾上=并排对比           ↑中：点名字=单读它      ↑右：是否提问    │
@@ -102,12 +158,29 @@
 | **读另一个模型的回答** | 点该轮顶部的模型选项卡，或点悬浮条卡片上的模型名 |
 | **复制某条回答** | 点该回答标题栏的「复制」（复制的是 Markdown 原文） |
 | **重新生成某条回答** | 最新一轮回答完成后，点对应标题栏的「重新生成」 |
+| **编辑刚才的提问** | 点最新一轮提问右上角的「编辑」，改完选「仅保存」或「保存并重新生成」 |
 | **交给 Copilot 继续聊** | 点「导入单条」（这一条）或「导入本组」（该模型的整段对话） |
 | 放大图片 | 点缩略图；再点一下或按 `Esc` 关闭 |
 | 打开回答里的链接 | 直接点击，会用系统浏览器打开 |
 | 切换历史侧栏 | 点「历史」，或 `Cmd+Shift+P` → `多模型对比: 显示 / 隐藏历史会话` |
 | 新建会话 | 点「新建会话」 |
 | 删除历史会话 | 点会话右侧 `✕`，再点一次变成的「确认」（两段式，防误触） |
+
+### 编辑已发送的提问
+
+最新一轮提问的右上角有一个「编辑」按钮（其它轮次没有 —— 改写历史轮会让后续上下文自相矛盾）。点开后可直接改文字：
+
+| 按钮 | 行为 |
+|------|------|
+| **仅保存** | 只改提问文字，不动已经拿到的回答（适合修正错别字） |
+| **保存并重新生成** | 用新提问**重新问本轮原有的那几个模型**（不受之后开关变化影响），清空重出 |
+| **取消** / `Esc` | 放弃修改 |
+
+- `Cmd` / `Ctrl` + 回车 = 保存并重新生成；
+- 生成过程中不能编辑（按钮置灰），点「停止」或等完成即可；
+- 带图片的轮次**只能改文字，图片原样保留**；
+- 改过的提问会带一个「已编辑」小标记；
+- 改的是第一轮时会话标题跟着更新；若那一轮被设为共享上下文，上下文会自动解除（回答已经变了）。
 
 ### 怎么读懂每格回答
 
@@ -135,6 +208,7 @@
 | **开关 = 参与提问** | 悬停条卡片右侧一个开关，控制是否向它提问；开关状态写入会话，下次打开保持 |
 | **点卡片 = 单读它** | 点卡片正文（或回答卡上的模型名）即退出并排，整个会话切到只读这个模型 |
 | **空会话也能选模型** | 还没提问时悬浮条就列出**你自己添加的**模型，先选后发（此时左复选框置灰） |
+| **提问可编辑** | 最新一轮的提问可就地编辑（提问区右上角「编辑」），可选「仅保存」或「保存并重新生成」；生成中自动置灰 |
 | **顶部悬浮控制条** | 半透明 + 毛玻璃，内容从它下面滚过，不占对话区横向空间；卡片上只留模型名与状态 |
 | 逐轮选项卡 | 每一轮顶部列出本轮参与的模型与各自状态，点一下切换，整个会话跟着切 |
 | **模型识别色** | 每个模型一个固定颜色（取主题图表色），选项卡、标题栏、悬浮条一致 |
@@ -161,7 +235,7 @@
 在设置界面搜索 `multiModelCompare` 即可找到，改完立即生效（不用重开面板）。
 
 > **默认范围**：打开面板时**只列出你自己添加的模型**（vendor = `customendpoint`），
-> 并默认全选（受 `maxSelectedModels` 限制），所以第一次打开就能直接问那 4 个。
+> 并默认全选（受 `maxSelectedModels` 上限约束），所以第一次打开就能直接提问。
 > 模型名**完整显示、不截断**：卡片宽度跟着名字走，一行放不下时悬浮条横向滚动。
 > 之后每次改动悬浮条上的开关都会写进会话文件，下次打开这个会话时恢复。
 >
@@ -176,16 +250,16 @@
 flowchart LR
     UI[Webview 界面<br/>悬浮对比条 + 输入框 + 回答] -->|postMessage| EXT[扩展主逻辑<br/>chatPanel.ts]
     EXT --> LM[vscode.lm 语言模型 API]
-    LM --> M1[5.6-Sol]
-    LM --> M2[6-Astra]
-    LM --> M3[V4.1-Flash]
-    LM --> M4[V4-Pro-0813]
+    LM --> M1[模型 A]
+    LM --> M2[模型 B]
+    LM --> M3[模型 C]
+    LM --> M4[模型 D]
     M1 & M2 & M3 & M4 -->|流式 chunk| UI
 ```
 
 扩展**不自己解析** `chatLanguageModels.json`、**不硬编码** API Key，而是通过 VS Code 的
 Language Model API（`vscode.lm`）读取本机已配置的模型（含 `chatLanguageModels.json`
-里注册的 Airouting / DeepSeek 自定义端点）。
+里注册的自定义端点）。
 
 这带来三个好处：
 
@@ -224,17 +298,24 @@ sequenceDiagram
 ```
 <VS Code globalStorage>/local.multi-model-compare/
 ├── sessions/<sessionId>.json   每个会话一个文件（先写 .tmp 再 rename，原子写入）
-└── images/<uuid>.<ext>         图片二进制，被会话文件按文件名引用
+├── images/<uuid>.<ext>         图片二进制，被会话文件按文件名引用
+└── contexts/                   未打开工作区时，「导入到 Copilot」的上下文文件写这里
 ```
 
-macOS 上的完整路径：
+各平台的完整路径：
 
-```
-~/Library/Application Support/Code/User/globalStorage/local.multi-model-compare/
-```
+| 平台 | 路径 |
+|------|------|
+| macOS | `~/Library/Application Support/Code/User/globalStorage/local.multi-model-compare/` |
+| Windows | `%APPDATA%\Code\User\globalStorage\local.multi-model-compare\` |
+| Linux | `~/.config/Code/User/globalStorage/local.multi-model-compare/` |
 
 > 会话文件里**只存图片文件名**，不存 base64，避免文件膨胀。
 > 扩展启动时会清理没被任何会话引用的孤儿图片。
+>
+> **「导入单条 / 导入本组」**会在当前工作区根目录写一个 `.multi-model-context/` 文件夹
+> （每个模型一个 `.md`），并把文件引用复制到剪贴板，方便在 Copilot Chat 里用 `#` 引用；
+> 未打开工作区时改写到上面的 `contexts/`。该目录是纯本地产物，可随时删除，已在 `.gitignore` 里。
 >
 > 旧版本留下的 `settings.json`（卡片宽度等）在 v0.4.0 后不再使用，
 > 留在那里不影响任何东西，可以手动删掉。
@@ -245,11 +326,13 @@ macOS 上的完整路径：
 
 ### 方式一：本地安装（推荐，日常使用）
 
+> 首次使用需要先克隆仓库并安装开发依赖，见上方 [快速安装](#快速安装)。
+
 ```bash
 npm run install:local
 ```
 
-先编译，再把运行期需要的文件（`package.json` / `out` / `media` / `README.md`，约 **170K**）
+先编译，再把运行期需要的文件（`package.json` / `out` / `media` / `README.md` / `LICENSE`，约 **170K**）
 复制到 `~/.vscode/extensions/local.multi-model-compare-<version>/`。**无需下载任何东西。**
 
 **装完之后必须完全退出并重启 VS Code**（`Cmd+Q` 再打开），扩展才会被加载。
@@ -333,7 +416,10 @@ npm run package:vsix
 ## 开发
 
 ```bash
-npm install
+git clone https://github.com/CrazyGoudanli/VsCode_ModleEvaluation.git
+cd VsCode_ModleEvaluation
+npm install           # 只装 devDependencies（无运行时依赖）
+
 npm run compile       # 一次性编译
 npm run watch         # 监听文件变化自动编译
 npm test              # 离线冒烟测试（70 项断言）
@@ -375,7 +461,7 @@ open scripts/preview.html          # macOS
 ├── src/
 │   ├── extension.ts      # 入口：注册命令、监听模型与设置变化
 │   ├── chatPanel.ts      # 核心：模型发现、并发流式请求、会话编排、Webview HTML
-│   ├── store.ts          # 会话 / 图片 / 设置的本地持久化（原子写入 + 孤儿清理）
+│   ├── store.ts          # 会话 / 图片的本地持久化（原子写入 + 孤儿清理）
 │   └── types.ts          # 共享类型
 ├── media/
 │   ├── markdown.js       # Markdown 渲染器（零依赖，可单独测试）
@@ -390,11 +476,14 @@ open scripts/preview.html          # macOS
 ├── docs/
 │   ├── 多模型对比对话插件需求文档.md
 │   └── 给朋友的安装说明.md    # 打包时复制到 dist/，随 vsix 一起发
-├── dist/                 # 打包产物（npm run package:vsix）
-├── .vscode/
-│   ├── launch.json       # F5 调试配置
-│   └── tasks.json        # compile / watch 任务
-└── package.json          # 扩展清单（命令、设置、engines）
+├── dist/                 # 打包产物（npm run package:vsix，已 gitignore）
+├── .vscode/              # F5 调试配置（launch.json）与 compile / watch 任务（tasks.json）
+├── .multi-model-context/ # 运行时生成：「导入到 Copilot」写出的上下文文件（已 gitignore，可删）
+├── .gitignore
+├── .vscodeignore         # 打包 vsix 时排除的文件
+├── LICENSE               # MIT
+├── package.json          # 扩展清单（命令、设置、engines）
+└── tsconfig.json
 ```
 
 ### 环境要求
@@ -425,6 +514,8 @@ open scripts/preview.html          # macOS
 
   > 需求文档 TBD-03 原本写的是"自动跳过"，意图一致，但实现方式不同（代价是多一次失败请求）。
 
+- **只支持编辑最新一轮的提问**：历史轮次一旦被改写，后续轮次会回放「新提问 + 旧回答」，
+  上下文自相矛盾，所以不做。编辑也只改文字，图片原样保留。
 - **历史图片会随上下文一起重发**（对已确认不支持图片的模型会自动跳过），因此多轮长会话下
   token 消耗与延迟会上升。
 - **未实现**：工具调用、编辑器代码上下文、模型参数调参、云同步、Marketplace 发布
@@ -436,7 +527,7 @@ open scripts/preview.html          # macOS
 |------|------|
 | 装完后命令面板搜不到命令 | 确认已**完全退出并重启** VS Code（不是只关窗口）。若仍没有，去扩展面板搜「多模型对比对话」看是否被禁用或标为不兼容 |
 | 提示"没有找到可用模型" | 确认已登录 GitHub / 已授权语言模型；在命令面板执行 `管理语言模型`（Manage Language Models）检查自定义端点是否可用 |
-| 模型列表里没有 Airouting / DeepSeek | 检查 `~/Library/Application Support/Code/User/chatLanguageModels.json` 配置是否有效，然后重开面板 |
+| 模型列表里没有自定义端点的模型 | 检查 `chatLanguageModels.json` 配置是否有效（macOS：`~/Library/Application Support/Code/User/`；Windows：`%APPDATA%\Code\User\`；Linux：`~/.config/Code/User/`），然后重开面板 |
 | 看不到 Copilot 自带的模型 | 默认只显示你自己添加的模型（vendor = `customendpoint`）；把 `multiModelCompare.onlyPreferredVendors` 关掉就会全部列出 |
 | 模型太多，一屏列不下 | 悬浮条会横向滚动；模型名与开关始终可见（名字不会被省略号截断） |
 | 一打开就默认勾选了全部模型 | 由 `multiModelCompare.maxSelectedModels` 控制，设为 `0` 则不限制 |
@@ -448,15 +539,29 @@ open scripts/preview.html          # macOS
 
 如果问题依旧，可以看扩展宿主日志定位：
 
-```
-~/Library/Application Support/Code/logs/<最新时间戳>/window<N>/exthost/exthost.log
-```
+| 平台 | 日志目录 |
+|------|----------|
+| macOS | `~/Library/Application Support/Code/logs/<最新时间戳>/window<N>/exthost/exthost.log` |
+| Windows | `%APPDATA%\Code\logs\<最新时间戳>\window<N>\exthost\exthost.log` |
+| Linux | `~/.config/Code/logs/<最新时间戳>/window<N>/exthost/exthost.log` |
 
 搜 `multi-model-compare` 即可看到激活记录与报错。
 
+还搞不定？欢迎到 [Issues](https://github.com/CrazyGoudanli/VsCode_ModleEvaluation/issues) 里描述现象，
+附上日志片段与 VS Code 版本会更快定位。
+
 ## 版本历史
 
-### v0.7.0（当前）
+### v0.8.0（当前）
+
+- **提问可编辑**：最新一轮的提问右上角多了「编辑」，可就地改文字，
+  并选择「**仅保存**」或「**保存并重新生成**」（`Cmd` / `Ctrl` + 回车）。
+  - 只支持**最新一轮** —— 改写历史轮会让后续回放「新提问 + 旧回答」，上下文自相矛盾；
+  - 「保存并重新生成」用新提问重问**本轮原有的那几个模型**，不受之后开关变化影响；
+  - 生成中自动禁用；带图片的轮次只改文字，图片原样保留；改过的提问带「已编辑」标记；
+  - 改首轮会同步会话标题；该轮若被设为共享上下文，会自动解除。
+
+### v0.7.0
 
 - **默认只看自己添加的模型**：默认只列出 `chatLanguageModels.json` 里配置的自定义端点
   （vendor = `customendpoint`），不再把 Copilot 自带的十几个一起列出来。
@@ -586,3 +691,24 @@ open scripts/preview.html          # macOS
 - 导出对比结果为 Markdown / CSV
 - 悬浮条卡片支持折叠 / 置顶 / 只显示差异
 - 单模型单独重试（现在只能整轮重发）
+
+## 贡献
+
+欢迎提 Issue 与 PR。动手前建议先了解几条硬约束：
+
+- **零依赖 / 零构建**：不引入运行时 npm 包，前端保持原生 JS/CSS，打包脚本也不依赖 `vsce`。
+  若改动确实需要新增依赖，请先开 Issue 讨论。
+- **中文注释与中文 UI 文案**：这是当前统一风格，新增代码请保持一致。
+- 改 UI 前请对照 [使用说明](#使用说明) 与 [已知限制与设计取舍](#已知限制与设计取舍) 里的交互约定，
+  「参与提问 / 参与对比 / 聚焦阅读」三者的职责划分都是刻意的，别顺手合并。
+- 提交前请确保编译与测试都通过：
+
+```bash
+git checkout -b feat/your-feature
+# 改完之后
+npm run compile && npm test
+```
+
+## 许可
+
+本项目以 [MIT License](./LICENSE) 发布。

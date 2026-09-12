@@ -44,8 +44,8 @@
 		/** 加入了并排对比的模型（只影响怎么看）：由悬浮条卡片左侧的复选框控制。
 		 *  非空时会话区进「并排对比」，只看这几个；空时回到单模型聚焦阅读。 */
 		compare: new Set(),
-		/** 聚焦阅读的对象：单模型阅读时整个会话只显示这个模型的回答 */
-		focusKey: '',
+		/** turnId -> { focusKey, compare: Set } */
+		turnViews: new Map(),
 		session: { id: '', title: '', selectedModels: [], turns: [] },
 		sessions: [],
 		attachments: [],
@@ -58,6 +58,8 @@
 		/** modelKey -> 悬浮条里的迷你卡（含两个勾选控件） */
 		minis: new Map(),
 		sending: false,
+		/** 正在编辑提问的轮次 id（同一时刻只编辑一个） */
+		editingTurnId: '',
 		noticeTimer: 0,
 	};
 
@@ -254,74 +256,105 @@
 	 *
 	 * 右侧开关只决定"是否提问"，不影响能不能看它已有的回答。
 	 */
+	function captureScrollAnchor() {
+		const containerRect = el.messages.getBoundingClientRect();
+		const turns = Array.from(el.messages.querySelectorAll('.turn'));
+		const anchor = turns.find((turn) => turn.getBoundingClientRect().bottom > containerRect.top) || turns[turns.length - 1];
+		return anchor
+			? { anchor, offset: anchor.getBoundingClientRect().top - containerRect.top }
+			: null;
+	}
+
+	function restoreScrollAnchor(snapshot) {
+		if (!snapshot || !snapshot.anchor.isConnected) {
+			return;
+		}
+		const containerRect = el.messages.getBoundingClientRect();
+		const currentOffset = snapshot.anchor.getBoundingClientRect().top - containerRect.top;
+		el.messages.scrollTop += currentOffset - snapshot.offset;
+	}
+
+	function viewForTurn(turnId) {
+		let view = state.turnViews.get(turnId);
+		if (!view) {
+			const turn = turnById(turnId);
+			const previous = state.session.turns[Math.max(0, (state.session.turns || []).findIndex((item) => item.id === turnId) - 1)];
+			const inherited = turn && turn.view ? turn.view : previous && previous.view;
+			view = {
+				focusKey: inherited?.focusKey || Object.keys(turn?.responses || {})[0] || state.models[0]?.key || '',
+				compare: new Set(inherited?.compareKeys || []),
+			};
+			state.turnViews.set(turnId, view);
+		}
+		return view;
+	}
+
+	function saveTurnView(turnId) {
+		const view = viewForTurn(turnId);
+		vscode.postMessage({
+			type: 'updateTurnView',
+			turnId,
+			view: { focusKey: view.focusKey, compareKeys: Array.from(view.compare) },
+		});
+	}
+
+	function setTurnFocus(turnId, key) {
+		const view = viewForTurn(turnId);
+		view.focusKey = key;
+		view.compare.clear();
+		saveTurnView(turnId);
+		applyVisibility();
+	}
+
+	function setTurnCompare(turnId, key, on) {
+		const view = viewForTurn(turnId);
+		if (on) view.compare.add(key); else view.compare.delete(key);
+		saveTurnView(turnId);
+		applyVisibility();
+	}
+
 	function applyVisibility() {
-		const compare = isCompareMode();
-		const focus = state.focusKey;
-		el.app.classList.toggle('compare', compare);
+		const scrollAnchor = captureScrollAnchor();
+		const previousOverflowAnchor = el.messages.style.overflowAnchor;
+		el.messages.style.overflowAnchor = 'none';
+		el.app.classList.remove('compare');
 
-		for (const entry of state.cards.values()) {
-			const visible = compare ? state.compare.has(entry.key) : entry.key === focus;
-			entry.card.classList.toggle('hidden', !visible);
-			entry.card.classList.toggle('tile', !!compare);
-			entry.card.style.order = compare ? String(modelOrder(entry.key)) : '';
-		}
-
-		for (const tab of state.tabs.values()) {
-			const on = compare ? state.compare.has(tab.key) : tab.key === focus;
-			tab.tab.classList.toggle('on', on);
-			tab.tab.classList.toggle('muted', !state.selected.has(tab.key));
-		}
-
-		// 并排时每一轮都换成横排布局；缺席的模型补一个占位格子，
-		// 这样各轮列出的模型始终一致，不会被误读成"这个模型答得短"。
 		for (const [turnId, info] of state.turnEls) {
 			const turn = turnById(turnId);
+			const view = viewForTurn(turnId);
+			const compare = view.compare.size > 0;
 			info.cards.classList.toggle('tile', compare);
 			info.section.classList.toggle('tile', compare);
-
-			for (const stale of Array.from(info.cards.querySelectorAll('.tile-missing'))) {
-				stale.remove();
+			for (const entry of state.cards.values()) {
+				if (entry.turnId !== turnId) continue;
+				const visible = compare ? view.compare.has(entry.key) : entry.key === view.focusKey;
+				entry.card.classList.toggle('hidden', !visible);
+				entry.card.classList.toggle('tile', compare);
 			}
+			for (const tab of info.tabbar.querySelectorAll('.tab')) {
+				const key = tab.dataset.key;
+				tab.classList.toggle('on', compare ? view.compare.has(key) : key === view.focusKey);
+			}
+			for (const stale of Array.from(info.cards.querySelectorAll('.tile-missing'))) stale.remove();
 			if (compare && turn) {
-				for (const key of compareKeys()) {
-					if ((turn.responses || {})[key]) {
-						continue;
-					}
-					const model = state.models.find((m) => m.key === key);
+				for (const key of view.compare) {
+					if ((turn.responses || {})[key]) continue;
 					const cell = document.createElement('article');
 					cell.className = 'card tile-missing';
-					cell.style.setProperty('--c', modelColorVar(key));
-					cell.style.order = String(modelOrder(key));
-					const head = document.createElement('div');
-					head.className = 'card-head';
-					const name = document.createElement('span');
-					name.className = 'card-name';
-					name.textContent = model ? modelLabel(model) : key;
-					head.appendChild(name);
-					const body = document.createElement('div');
-					body.className = 'card-body';
-					body.textContent = '本轮未向该模型提问。';
-					cell.appendChild(head);
-					cell.appendChild(body);
+					cell.textContent = '本轮未向该模型提问。';
 					info.cards.appendChild(cell);
 				}
 			}
-		}
-
-		// 并排对比时每轮都有多个模型，没有"没向谁提问"这回事；
-		// 单读时若当前模型本轮缺席，给一句占位说明。
-		const name = focusModelName();
-		for (const [turnId, info] of state.turnEls) {
-			const turn = turnById(turnId);
-			const missing = !compare && turn && !(turn.responses || {})[focus];
+			const missing = !compare && turn && !(turn.responses || {})[view.focusKey];
 			info.missing.classList.toggle('hidden', !missing);
-			if (missing) {
-				info.missing.textContent =
-					'本轮未向「' + name + '」提问，点其它模型卡片或选项卡可以看别人的回答。';
-			}
+			if (missing) info.missing.textContent = '本轮未向该模型提问。';
 		}
-
 		renderStripActive();
+		restoreScrollAnchor(scrollAnchor);
+		requestAnimationFrame(() => {
+			restoreScrollAnchor(scrollAnchor);
+			el.messages.style.overflowAnchor = previousOverflowAnchor;
+		});
 	}
 
 	function focusModelName() {
@@ -539,6 +572,22 @@
 	function renderSessionHeader() {
 		el.sessionTitle.textContent = state.session.title || '新会话';
 		el.sessionTitle.title = '会话 ID：' + state.session.id;
+		let contextBadge = document.getElementById('context-badge');
+		if (!contextBadge) {
+			contextBadge = document.createElement('button');
+			contextBadge.id = 'context-badge';
+			contextBadge.className = 'btn tiny context-badge';
+			contextBadge.addEventListener('click', () => vscode.postMessage({ type: 'clearContext' }));
+			el.sessionTitle.parentElement.appendChild(contextBadge);
+		}
+		const source = state.session.contextSource;
+		const sourceTurn = source && (state.session.turns || []).find((turn) => turn.id === source.turnId);
+		const sourceModel = sourceTurn && state.models.find((model) => model.key === source.modelKey);
+		contextBadge.hidden = !source || !sourceTurn || !sourceModel;
+		if (source && sourceTurn && sourceModel) {
+			contextBadge.textContent = '上下文：' + modelLabel(sourceModel) + ' · 第 ' + ((state.session.turns || []).indexOf(sourceTurn) + 1) + ' 轮 ×';
+			contextBadge.title = '当前使用“被选中的模型回答”作为后续所有模型的共享上下文，点击清除';
+		}
 	}
 
 	function renderSession() {
@@ -547,6 +596,7 @@
 		state.cards.clear();
 		state.tabs.clear();
 		state.turnEls.clear();
+		state.turnViews.clear();
 		for (const turn of state.session.turns || []) {
 			appendTurn(turn, false);
 		}
@@ -593,13 +643,40 @@
 		// ── 用户提问：聚焦阅读下是一块带底色的「提问」区，平铺模式下是一个气泡
 		const qRow = document.createElement('div');
 		qRow.className = 'q-row';
+
+		// 提问区头部：左边是「你的提问」标签，右边是「编辑」按钮
+		const qBar = document.createElement('div');
+		qBar.className = 'q-bar';
 		const qTag = document.createElement('div');
 		qTag.className = 'q-tag';
 		qTag.textContent = '你的提问';
+		const qEdited = document.createElement('span');
+		qEdited.className = 'q-edited';
+		qEdited.textContent = '已编辑';
+		qEdited.title = '这条提问在发送后被修改过';
+		qEdited.hidden = !turn.editedAt;
+		const qActions = document.createElement('div');
+		qActions.className = 'q-actions';
+		const editBtn = document.createElement('button');
+		editBtn.type = 'button';
+		editBtn.className = 'q-edit';
+		editBtn.textContent = '编辑';
+		editBtn.title = '编辑这一轮的提问';
+		editBtn.addEventListener('click', () => startEditPrompt(turn.id));
+		qActions.appendChild(editBtn);
+		qBar.appendChild(qTag);
+		qBar.appendChild(qEdited);
+		qBar.appendChild(qActions);
+
 		const qText = document.createElement('div');
 		qText.className = 'q-text';
 		qText.textContent = turn.prompt || '(图片消息)';
-		qRow.appendChild(qTag);
+
+		// 编辑态容器：点击「编辑」后才填充 textarea 与按钮
+		const editArea = document.createElement('div');
+		editArea.className = 'q-edit-area hidden';
+
+		qRow.appendChild(qBar);
 		qRow.appendChild(qText);
 
 		if (turn.images && turn.images.length) {
@@ -615,6 +692,7 @@
 			}
 			qRow.appendChild(thumbs);
 		}
+		qRow.appendChild(editArea);
 		section.appendChild(qRow);
 
 		// ── 模型选项卡（仅聚焦模式可见）
@@ -649,14 +727,169 @@
 		}
 		section.appendChild(cards);
 
-		state.turnEls.set(turn.id, { section, missing, tabbar, cards });
+		state.turnEls.set(turn.id, {
+			section,
+			missing,
+			tabbar,
+			cards,
+			qText,
+			qEdited,
+			editBtn,
+			editArea,
+			editing: false,
+		});
 		el.messages.appendChild(section);
 
+		refreshPromptActions();
 		if (doScroll !== false) {
 			scrollToBottom();
 		}
 		return section;
 	}
+
+	// #region 编辑提问（仅最新一轮）
+
+	/**
+	 * 刷新「编辑」按钮的可用性：
+	 * 只有**最新一轮**才显示编辑入口（历史轮次改写会让后续上下文自相矛盾），
+	 * 生成中也不允许编辑。
+	 */
+	function refreshPromptActions() {
+		const last = latestTurn();
+		for (const [turnId, info] of state.turnEls) {
+			if (!info.editBtn) {
+				continue;
+			}
+			const isLast = !!last && last.id === turnId;
+			info.editBtn.hidden = !isLast;
+			info.editBtn.disabled = !isLast || state.sending;
+		}
+	}
+
+	/** 进入编辑态：把提问文字换成 textarea。 */
+	function startEditPrompt(turnId) {
+		if (state.sending) {
+			return;
+		}
+		const info = state.turnEls.get(turnId);
+		const turn = turnById(turnId);
+		if (!info || !turn || info.editing) {
+			return;
+		}
+		// 同一时刻只允许一处编辑
+		if (state.editingTurnId && state.editingTurnId !== turnId) {
+			cancelEditPrompt();
+		}
+		state.editingTurnId = turnId;
+		info.editing = true;
+		info.qText.classList.add('hidden');
+		info.editArea.textContent = '';
+		info.editArea.classList.remove('hidden');
+		// 已经在编辑了，顶部的「编辑」按钮先收起来（退出编辑时由 refreshPromptActions 还原）
+		info.editBtn.hidden = true;
+
+		const input = document.createElement('textarea');
+		input.className = 'q-edit-input';
+		input.rows = 3;
+		input.value = turn.prompt;
+		input.placeholder = '输入问题…';
+		input.addEventListener('keydown', (event) => {
+			if (event.key === 'Escape') {
+				event.preventDefault();
+				cancelEditPrompt();
+				return;
+			}
+			// Cmd/Ctrl + 回车 = 保存并重新生成（与「回车发送」的直觉一致）
+			if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+				event.preventDefault();
+				commitEditPrompt(turnId, true);
+			}
+		});
+
+		const actions = document.createElement('div');
+		actions.className = 'q-edit-actions';
+
+		const save = document.createElement('button');
+		save.type = 'button';
+		save.className = 'btn tiny';
+		save.textContent = '仅保存';
+		save.title = '只修改提问文字，不重新向模型提问';
+		save.addEventListener('click', () => commitEditPrompt(turnId, false));
+
+		const rerun = document.createElement('button');
+		rerun.type = 'button';
+		rerun.className = 'btn tiny primary';
+		rerun.textContent = '保存并重新生成';
+		rerun.title = '用新提问重新问本轮的这些模型（Cmd/Ctrl + 回车）';
+		rerun.addEventListener('click', () => commitEditPrompt(turnId, true));
+
+		const cancel = document.createElement('button');
+		cancel.type = 'button';
+		cancel.className = 'btn tiny';
+		cancel.textContent = '取消';
+		cancel.title = '放弃修改（Esc）';
+		cancel.addEventListener('click', () => cancelEditPrompt());
+
+		actions.appendChild(save);
+		actions.appendChild(rerun);
+		actions.appendChild(cancel);
+		info.editArea.appendChild(input);
+		info.editArea.appendChild(actions);
+
+		if (turn.images && turn.images.length) {
+			const tip = document.createElement('div');
+			tip.className = 'q-edit-tip';
+			tip.textContent = '本轮图片会原样保留，编辑不会改动图片。';
+			info.editArea.appendChild(tip);
+		}
+
+		// 注意：编辑期间不能重建卡片（否则 textarea 会被顶掉），所以这里不调 applyVisibility
+		input.focus();
+		input.setSelectionRange(input.value.length, input.value.length);
+	}
+
+	/** 退出编辑态，并把提问文字恢复成 `prompt`。 */
+	function closeEditPrompt(turnId, prompt) {
+		const info = state.turnEls.get(turnId);
+		state.editingTurnId = '';
+		if (!info) {
+			return;
+		}
+		info.editing = false;
+		info.editArea.classList.add('hidden');
+		info.editArea.textContent = '';
+		info.qText.classList.remove('hidden');
+		if (typeof prompt === 'string') {
+			info.qText.textContent = prompt || '(图片消息)';
+		}
+		refreshPromptActions();
+	}
+
+	/** 提交编辑。`regenerate` 为真时会请求扩展侧重新向本轮原有模型提问。 */
+	function commitEditPrompt(turnId, regenerate) {
+		const info = state.turnEls.get(turnId);
+		if (!info || !info.editing) {
+			return;
+		}
+		const input = info.editArea.querySelector('.q-edit-input');
+		const prompt = input ? input.value : '';
+		closeEditPrompt(turnId, prompt);
+		if (regenerate) {
+			setSending(true);
+		}
+		vscode.postMessage({ type: 'editPrompt', turnId, prompt, regenerate });
+	}
+
+	function cancelEditPrompt() {
+		const turnId = state.editingTurnId;
+		if (!turnId) {
+			return;
+		}
+		const turn = turnById(turnId);
+		closeEditPrompt(turnId, turn ? turn.prompt : '');
+	}
+
+	// #endregion
 
 	/** 聚焦模式下每轮顶部的模型选项卡。 */
 	function createTab(turnId, key, response) {
@@ -664,8 +897,9 @@
 		const tab = document.createElement('button');
 		tab.type = 'button';
 		tab.className = 'tab';
+		tab.dataset.key = key;
 		tab.style.setProperty('--c', modelColorVar(key));
-		tab.title = (model ? model.key : key) + '\n点一下退出并排对比，只读该模型';
+		tab.title = (model ? model.key : key) + '\n点击后只切换本轮展示的模型';
 
 		const dot = document.createElement('span');
 		dot.className = 'dot';
@@ -675,10 +909,17 @@
 		const time = document.createElement('span');
 		time.className = 'tm';
 
+		const check = document.createElement('input');
+		check.type = 'checkbox';
+		check.className = 'tab-check';
+		check.checked = viewForTurn(turnId).compare.has(key);
+		check.addEventListener('click', (event) => event.stopPropagation());
+		check.addEventListener('change', () => setTurnCompare(turnId, key, check.checked));
+		tab.appendChild(check);
 		tab.appendChild(dot);
 		tab.appendChild(name);
 		tab.appendChild(time);
-		tab.addEventListener('click', () => setFocus(key));
+		tab.addEventListener('click', () => setTurnFocus(turnId, key));
 
 		const entry = { tab, dot, tm: time, key };
 		state.tabs.set(cardKey(turnId, key), entry);
@@ -741,6 +982,13 @@
 		importModel.title = '导入该模型在本会话中的全部对话到 Copilot Chat';
 		importModel.addEventListener('click', () => vscode.postMessage({ type: 'importToCopilot', turnId, key, scope: 'model' }));
 
+		const setContext = document.createElement('button');
+		setContext.className = 'card-copy card-context';
+		setContext.type = 'button';
+		setContext.textContent = '设为上下文';
+		setContext.title = '将这条回答作为后续所有模型共享的上下文';
+		setContext.addEventListener('click', () => vscode.postMessage({ type: 'setContext', turnId, key }));
+
 		const status = document.createElement('span');
 		status.className = 'card-status';
 
@@ -750,6 +998,7 @@
 		actions.appendChild(regenerate);
 		actions.appendChild(importOne);
 		actions.appendChild(importModel);
+		actions.appendChild(setContext);
 
 		head.appendChild(dot);
 		head.appendChild(name);
@@ -772,6 +1021,7 @@
 			regenerate,
 			importOne,
 			importModel,
+			setContext,
 			text: (response && response.text) || '',
 			res: response || { status: 'pending', text: '' },
 			timer: 0,
@@ -813,6 +1063,10 @@
 		const importDisabled = !entry.text || res.status === 'streaming' || res.status === 'pending';
 		entry.importOne.disabled = importDisabled;
 		entry.importModel.disabled = importDisabled;
+		entry.setContext.disabled = !entry.text || res.status !== 'done';
+		entry.setContext.textContent = state.session.contextSource && state.session.contextSource.turnId === entry.turnId && state.session.contextSource.modelKey === entry.key
+			? '当前上下文'
+			: '设为上下文';
 
 		let hint = entry.card.querySelector('.card-hint');
 		if (res.droppedImages) {
@@ -984,6 +1238,11 @@
 		state.sending = value;
 		el.stop.disabled = !value;
 		updateSendEnabled();
+		// 开始生成时先把编辑态收起来，避免改到一半被新回答覆盖
+		if (value && state.editingTurnId) {
+			cancelEditPrompt();
+		}
+		refreshPromptActions();
 	}
 
 	function renderAttachments() {
@@ -1129,8 +1388,16 @@
 	});
 
 	document.addEventListener('keydown', (event) => {
-		if (event.key === 'Escape') {
+		if (event.key !== 'Escape') {
+			return;
+		}
+		// Esc 的优先级：先关图片预览，没有预览时才取消编辑
+		if (lightbox && lightbox.classList.contains('show')) {
 			closeLightbox();
+			return;
+		}
+		if (state.editingTurnId) {
+			cancelEditPrompt();
 		}
 	});
 
@@ -1194,6 +1461,28 @@
 			case 'reset':
 				resetCard(message.turnId, message.key);
 				break;
+
+			case 'prompt': {
+				// 扩展侧改完提问后的轻量回推：只刷新这一轮的提问区，不整屏重渲染
+				const turn = (state.session.turns || []).find((t) => t.id === message.turnId);
+				if (turn) {
+					turn.prompt = message.prompt;
+					turn.editedAt = message.editedAt;
+				}
+				const info = state.turnEls.get(message.turnId);
+				if (info && !info.editing) {
+					info.qText.textContent = message.prompt || '(图片消息)';
+					info.qEdited.hidden = !message.editedAt;
+				}
+				if (typeof message.title === 'string') {
+					state.session.title = message.title;
+				}
+				if ('contextSource' in message) {
+					state.session.contextSource = message.contextSource || undefined;
+				}
+				renderSessionHeader();
+				break;
+			}
 
 			case 'idle':
 				setSending(false);
