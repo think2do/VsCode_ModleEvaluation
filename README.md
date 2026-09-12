@@ -248,7 +248,7 @@ npm run install:local
 
 ```mermaid
 flowchart LR
-    UI[Webview 界面<br/>悬浮对比条 + 输入框 + 回答] -->|postMessage| EXT[扩展主逻辑<br/>panel.ts]
+    UI[Webview 界面<br/>悬浮条 + 输入框 + 回答] -->|postMessage| EXT[扩展主逻辑<br/>panel.ts]
     EXT --> LM[vscode.lm 语言模型 API]
     LM --> M1[模型 A]
     LM --> M2[模型 B]
@@ -420,12 +420,21 @@ git clone https://github.com/CrazyGoudanli/VsCode_ModleEvaluation.git
 cd VsCode_ModleEvaluation
 npm install           # 只装 devDependencies（无运行时依赖）
 
-npm run compile       # 一次性编译
+npm run compile       # 一次性编译（tsc -b，同时编扩展侧与 Webview 侧）
 npm run watch         # 监听文件变化自动编译
-npm test              # 离线冒烟测试（70 项断言）
+npm test              # 离线测试（122 项断言）
 npm run install:local # 编译 + 装到本机 ~/.vscode/extensions
 npm run package:vsix  # 编译 + 打包 dist/*.vsix（零下载）
 ```
+
+两个编译目标（`tsc -b` 一次搞定，配置见 `tsconfig.json` 的 project references）：
+
+| 源码 | 产物 | 目标环境 |
+|------|------|---------|
+| `src/` | `out/` | 扩展宿主（Node，CommonJS） |
+| `webview/` | `media/dist/webview/` | Webview（浏览器，原生 ESM） |
+
+`media/markdown.js` 与 `media/style.css` 是**手写的源文件**，不经过编译。
 
 ### 可用命令
 
@@ -455,18 +464,30 @@ npm run package:vsix  # 编译 + 打包 dist/*.vsix（零下载）
   不回放；丢过图片的模型历史里不再发图；共享上下文的追加条件；
 - **模型筛选**（`lm/models.ts`）—— 白名单命中 / 落空退回全部 / 大小写不敏感；
   「隐藏即不可选」与勾选上限截断；
-- **协议收窄**（`protocol.ts`）—— 认得出每一类消息，认不出的直接忽略；
+- **协议收窄**（`src/protocol.ts`）—— 认得出每一类消息，认不出的直接忽略；
   `send.selected` 缺省时保留 `undefined`（表示回落到会话勾选，而不是「一个都没勾」）；
-- **导入规划**（`session/import.ts`）—— 单条 / 整段两种范围的内容与文件名。
+- **导入规划**（`src/session/import.ts`）—— 单条 / 整段两种范围的内容与文件名。
+
+前端（`webview/`）目前**没有 DOM 测试环境**（上 jsdom 会违反「零下载」约定），
+所以那部分靠 `scripts/preview.html` 手工回归。改界面时的回归清单见
+[`docs/refactor-checklist.md`](docs/refactor-checklist.md)。
 
 ### 界面预览（不用启动 VS Code）
 
-`scripts/preview.html` 在普通浏览器里加载真实的 `style.css` / `markdown.js` / `main.js`，
-用 mock 的 `acquireVsCodeApi` 模拟扩展消息，适合调样式时快速看效果：
+`scripts/preview.html` 在普通浏览器里加载真实的 `style.css` / `markdown.js` / 前端模块，
+用 mock 的 `acquireVsCodeApi` 模拟扩展侧消息，适合调样式或改前端逻辑时快速看效果。
+
+> ⚠️ **必须用本地 HTTP 服务打开，不能直接双击**：前端现在是原生 ESM
+> （`<script type="module">`），浏览器会因 CORS 拒绝从 `file://` 加载模块。
 
 ```bash
-open scripts/preview.html          # macOS
+# 在仓库根目录
+python3 -m http.server 8000
+# 然后浏览器打开 http://localhost:8000/scripts/preview.html
 ```
+
+这个页面用的是与真实 Webview **一致**的 CSP，所以它同时也是验证「CSP 下 ESM 能否
+加载」的工具。改 `src/webview/html.ts` 里的 CSP 时，请同步改这里的。
 
 ## 项目结构
 
@@ -474,9 +495,9 @@ open scripts/preview.html          # macOS
 ├── src/
 │   ├── extension.ts      # 入口：注册命令、监听模型与设置变化
 │   ├── panel.ts          # 面板：消息路由 + 会话编排（把下面各层粘起来）
-│   ├── protocol.ts       # Webview ⇄ 扩展 的消息契约（两侧共享的唯一一份定义）
 │   ├── store.ts          # 会话 / 图片的本地持久化（原子写入 + 孤儿清理）
-│   ├── types.ts          # 共享类型
+│   ├── types.ts          # 共享类型（含 Webview ⇄ 扩展 的消息契约）
+│   ├── protocol.ts       # 收到的消息的运行时收窄（把 unknown 变成有类型的消息）
 │   ├── lm/               # 语言模型这一侧
 │   │   ├── discovery.ts  #   拉取模型清单 → 按设置筛选 → 收敛勾选
 │   │   ├── models.ts     #   模型标识、图片能力探测、白名单过滤、勾选收敛
@@ -490,16 +511,30 @@ open scripts/preview.html          # macOS
 │   └── webview/
 │       ├── html.ts       #   Webview HTML 外壳与 CSP
 │       └── wire.ts       #   落盘结构 → 界面结构（图片补 data URL + 缓存）
+├── webview/              # Webview 前端源码（TypeScript，编译成原生 ESM）
+│   ├── main.ts           #   入口：事件绑定 + 启动
+│   ├── messages.ts       #   扩展侧消息分发
+│   ├── turn.ts           #   轮次渲染（整屏重建 / 追加一轮）
+│   ├── card.ts           #   回答卡片（含流式增量合并渲染）
+│   ├── tab.ts            #   每轮顶部的模型选项卡
+│   ├── strip.ts          #   顶部悬浮条（左复选框 / 中正文 / 右开关）
+│   ├── composer.ts       #   输入区 + 编辑提问（仅最新一轮）
+│   ├── sessions.ts       #   右侧历史会话列表
+│   ├── display.ts        #   展示状态（每轮看谁 / 并排哪几个）+ DOM 同步
+│   ├── ui.ts             #   通用工具：提示条、状态点、图片放大、复制
+│   ├── state.ts          #   全局状态、DOM 引用、常量
+│   └── host.ts           #   与宿主的消息通道（acquireVsCodeApi 只在这里调一次）
 ├── media/
-│   ├── markdown.js       # Markdown 渲染器（零依赖，可单独测试）
-│   ├── main.js           # Webview 前端逻辑（渲染、选项卡/悬浮条、图片、历史、拖拽）
-│   └── style.css         # 界面样式（跟随 VS Code 主题变量）
+│   ├── markdown.js       # Markdown 渲染器（手写源文件，零依赖，可单独测试）
+│   ├── style.css         # 界面样式（手写源文件，跟随 VS Code 主题变量）
+│   └── dist/             # 编译产物：webview/ → media/dist/webview/*.js（已 gitignore）
 ├── scripts/
 │   ├── smoke-render.mjs  # Markdown 渲染的离线冒烟测试
 │   ├── unit-test.mjs     # 纯逻辑单元测试（上下文回放 / 模型筛选 / 协议收窄）
 │   ├── install-local.mjs # 本地安装 / 卸载到 ~/.vscode/extensions
 │   ├── package-vsix.mjs  # 手工打包 .vsix（零依赖，不用 vsce）
-│   └── preview.html      # 开发用界面预览页（浏览器里直接看 UI）
+│   ├── preview.html      # 开发用界面预览页（需本地 HTTP 服务）
+│   └── preview-theme.css # 预览页用的「假 VS Code 主题」（为兼容 CSP 而不内联）
 ├── docs/
 │   ├── design/           # 界面方案 Demo（当初选方案用的静态网页，共享 shared.css）
 │   ├── refactor-checklist.md  # 改 UI 时的回归清单（动手前先读）
@@ -512,7 +547,9 @@ open scripts/preview.html          # macOS
 ├── .vscodeignore         # 打包 vsix 时排除的文件
 ├── LICENSE               # MIT
 ├── package.json          # 扩展清单（命令、设置、engines）
-└── tsconfig.json
+├── tsconfig.json         # 解决方案配置：串起下面两个子项目（tsc -b）
+├── tsconfig.ext.json     # 扩展侧（Node / CommonJS → out/）
+└── tsconfig.webview.json # Webview 侧（浏览器 / 原生 ESM → media/dist/）
 ```
 
 ### 环境要求

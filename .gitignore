@@ -4,6 +4,9 @@ dist/
 *.vsix
 .DS_Store
 
+# tsc -b 的增量信息与 .d.ts 输出（只为满足 composite，不参与运行）
+.build/
+
 # package-vsix.mjs 的打包暂存目录（正常会自己清理，中途失败时会残留）
 .vsix-stage/
 

@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    // 产出浏览器原生 ESM。用 NodeNext 解析 + `webview/package.json` 里的
+    // "type": "module"，这样 tsc 会**强制** import 路径必须带 `.js` 后缀 ——
+    // 浏览器不认隐式后缀，这是 ESM 最容易踩的坑，让编译器替我们拦住。
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // 明确排除 @types/node：这段代码跑在 Webview（浏览器环境）里，
+    // 引入 node 类型会让 setTimeout 等 API 返回 NodeJS.Timeout 而不是 number。
+    "types": [],
+    "rootDir": ".",
+    "outDir": "media/dist",
+    "composite": true,
+    "declarationDir": ".build/dts-webview",
+    "tsBuildInfoFile": ".build/webview.tsbuildinfo",
+    "sourceMap": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  // 包含 webview 源码，以及两侧共享的纯类型定义（`types.ts` 只有类型，
+  // 编译产物是一个空壳，Webview 那边全是 `import type`，运行时不会去加载它）
+  "include": ["webview", "src/types.ts"]
+}

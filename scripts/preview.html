@@ -4,56 +4,23 @@
 <meta charset="UTF-8" />
 <title>多模型对比对话 · 界面预览</title>
 <!--
-  开发用预览页：在普通浏览器里加载真实的 media/style.css + markdown.js + main.js，
+  开发用预览页：在普通浏览器里加载真实的 media/style.css + markdown.js + 前端模块，
   用 mock 的 acquireVsCodeApi 模拟扩展侧消息，用来验证布局、Markdown 渲染、
-  拖拽宽度、复制按钮等界面行为（无需启动 VS Code）。
+  并排对比、编辑提问、复制按钮等界面行为（无需启动 VS Code）。
 
-  注意：这里只复刻 HTML 骨架，样式与逻辑都引用真实文件，改样式请改 media/style.css。
+  ⚠️ 必须用本地 HTTP 服务打开，不能直接双击（file://）：
+  前端现在是原生 ESM（`<script type="module">`），浏览器会因 CORS 拒绝
+  从 file:// 加载模块。在仓库根目录执行：
+
+      python3 -m http.server 8000
+      # 然后浏览器打开 http://localhost:8000/scripts/preview.html
+
+  CSP 与真实 Webview 保持一致（见 src/webview/html.ts），所以这个页面同时
+  也是「CSP 下 ESM 能否正常加载」的验证工具。改 CSP 请同步改这里。
 -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data: blob:; style-src 'self'; font-src 'self'; script-src 'nonce-dev-preview' 'strict-dynamic'" />
 <link href="../media/style.css" rel="stylesheet" />
-<style>
-	/* 模拟 VS Code 深色主题变量，让预览更接近真实观感 */
-	:root {
-		--vscode-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-		--vscode-font-size: 13px;
-		--vscode-foreground: #cccccc;
-		--vscode-editor-background: #1e1e1e;
-		--vscode-panel-border: rgba(128, 128, 128, 0.35);
-		--vscode-button-background: #0e639c;
-		--vscode-button-foreground: #ffffff;
-		--vscode-button-hoverBackground: #1177bb;
-		--vscode-button-secondaryBackground: rgba(128, 128, 128, 0.2);
-		--vscode-button-secondaryHoverBackground: rgba(128, 128, 128, 0.3);
-		--vscode-input-background: #3c3c3c;
-		--vscode-input-foreground: #cccccc;
-		--vscode-input-border: rgba(128, 128, 128, 0.4);
-		--vscode-focusBorder: #007fd4;
-		--vscode-errorForeground: #f48771;
-		--vscode-textLink-foreground: #3794ff;
-		--vscode-editorWidget-background: rgba(128, 128, 128, 0.06);
-		--vscode-sideBarSectionHeader-background: rgba(128, 128, 128, 0.1);
-		--vscode-textCodeBlock-background: rgba(0, 0, 0, 0.3);
-		--vscode-textBlockQuote-background: rgba(128, 128, 128, 0.1);
-		--vscode-textBlockQuote-border: rgba(128, 128, 128, 0.5);
-		--vscode-list-hoverBackground: rgba(128, 128, 128, 0.12);
-		--vscode-list-activeSelectionBackground: rgba(128, 128, 128, 0.25);
-		--vscode-progressBar-background: #0e70c0;
-		--vscode-editor-font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-		--vscode-editor-font-size: 12px;
-		--vscode-testing-iconPassed: #73c991;
-		--vscode-scrollbarSlider-background: rgba(121, 121, 121, 0.4);
-		--vscode-scrollbarSlider-hoverBackground: rgba(100, 100, 100, 0.7);
-		--vscode-scrollbarSlider-activeBackground: rgba(191, 191, 191, 0.4);
-		--vscode-descriptionForeground: #9d9d9d;
-		--vscode-sideBar-background: #252526;
-		--vscode-charts-blue: #3794ff;
-		--vscode-charts-purple: #b180d7;
-		--vscode-charts-orange: #d18616;
-		--vscode-charts-green: #89d185;
-		--vscode-charts-red: #f14c4c;
-		--vscode-charts-yellow: #cca700;
-	}
-</style>
+<link href="preview-theme.css" rel="stylesheet" />
 </head>
 <body>
 <div id="app">
@@ -95,13 +62,19 @@
 	</footer>
 </div>
 
-<script>
-	// 模拟 VS Code 的 webview API，把前端发出的消息记到 window.__sent 供检查
+<script nonce="dev-preview">
+	// 模拟 VS Code 的 webview API。
+	// 收到的 'ready' 会触发下面的演示数据 —— 这样能保证演示数据在模块
+	// 加载完、监听器挂好之后才发出去（模块脚本是 defer 的，内联脚本先执行，
+	// 直接在这里发数据会因为监听器还没注册而丢失）。
 	window.acquireVsCodeApi = function () {
 		return {
 			postMessage: (message) => {
 				window.__sent = window.__sent || [];
 				window.__sent.push(message);
+				if (message && message.type === 'ready') {
+					window.__emitDemoData();
+				}
 			},
 			getState: () => ({}),
 			setState: () => {},
@@ -112,13 +85,9 @@
 	window.__emit = function (message) {
 		window.dispatchEvent(new MessageEvent('message', { data: message }));
 	};
-</script>
-<script src="../media/markdown.js"></script>
-<script src="../media/main.js"></script>
-<script>
-	// ── 演示数据（只为在浏览器里试「编辑提问」，删掉这段就是一个空白新会话）──
-	// main.js 启动时会发 ready，这里直接替扩展侧回应 models / session。
-	(function () {
+
+	// ── 演示数据（只为在浏览器里试交互，删掉这段就是一个空白新会话）──
+	window.__emitDemoData = function () {
 		const models = [
 			{ key: 'customendpoint:6-Astra', id: '6-Astra', vendor: 'customendpoint', family: 'astra', name: '6-Astra', maxInputTokens: 200000 },
 			{ key: 'customendpoint:V4.1-Flash', id: 'V4.1-Flash', vendor: 'customendpoint', family: 'flash', name: 'V4.1-Flash', maxInputTokens: 200000 },
@@ -146,11 +115,14 @@
 			},
 			sessions: [],
 		});
-		// 点「仅保存 / 保存并重新生成」后，前端会把 editPrompt 记在 window.__sent 里。
-		// 想模拟扩展侧回推，可在控制台执行：
-		//   __emit({ type: 'prompt', turnId: 'demo-turn-1', prompt: '改过的文字',
-		//            editedAt: Date.now(), title: '改过的文字', contextSource: null })
-	})();
+	};
+
+	// 点「仅保存 / 保存并重新生成」后，前端会把 editPrompt 记在 window.__sent 里。
+	// 想模拟扩展侧回推，可在控制台执行：
+	//   __emit({ type: 'prompt', turnId: 'demo-turn-1', prompt: '改过的文字',
+	//            editedAt: Date.now(), title: '改过的文字', contextSource: null })
 </script>
+<script nonce="dev-preview" src="../media/markdown.js"></script>
+<script type="module" nonce="dev-preview" src="../media/dist/webview/main.js"></script>
 </body>
 </html>

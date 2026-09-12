@@ -1,17 +1,7 @@
 {
-  "compilerOptions": {
-    "module": "Node16",
-    "moduleResolution": "Node16",
-    "target": "ES2022",
-    "lib": ["ES2022"],
-    "outDir": "out",
-    "rootDir": "src",
-    "sourceMap": true,
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
-  },
-  "include": ["src"],
-  "exclude": ["node_modules", "out"]
+  // 解决方案式配置：本身不编译任何东西，只是把两个子项目串起来，
+  // 这样 `tsc -b` 一条命令就能增量编译「扩展侧 + Webview 侧」。
+  // 子项目各自的设置见 tsconfig.ext.json / tsconfig.webview.json。
+  "files": [],
+  "references": [{ "path": "./tsconfig.ext.json" }, { "path": "./tsconfig.webview.json" }]
 }

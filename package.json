@@ -62,8 +62,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "compile": "tsc -b",
+    "watch": "tsc -b --watch",
     "pretest": "npm run compile",
     "test": "node scripts/smoke-render.mjs && node scripts/unit-test.mjs",
     "install:local": "npm run compile && node scripts/install-local.mjs",

@@ -6,16 +6,20 @@
 自动化能覆盖的部分先跑：
 
 ```bash
-npm run compile   # tsc 必须无错
-npm test          # markdown.js 的 70 项断言（XSS + 语法 + 边界）
+npm run compile   # tsc -b 必须无错（同时编扩展侧与 Webview 侧）
+npm test          # markdown.js 的 70 项 + 纯逻辑的 52 项（共 122 项）
 ```
 
-前端（`media/`）目前**没有 DOM 测试环境**（上 jsdom 会违反「零下载」约定），
+前端（`webview/`）目前**没有 DOM 测试环境**（上 jsdom 会违反「零下载」约定），
 所以下面这些只能手工验证。最快的验证方式是浏览器预览页：
 
 ```bash
-open scripts/preview.html     # 已 mock acquireVsCodeApi，可直接点
+python3 -m http.server 8000     # 在仓库根目录
+# 浏览器打开 http://localhost:8000/scripts/preview.html
 ```
+
+> ⚠️ 不能直接双击 `preview.html`：前端是原生 ESM，`file://` 下会被 CORS 拒掉。
+> 预览页用的是与真实 Webview 一致的 CSP，所以它也能验证 CSP 下的加载行为。
 
 ---
 
@@ -131,3 +135,31 @@ open scripts/preview.html     # 已 mock acquireVsCodeApi，可直接点
 - [ ] 打包只含 `package.json` / `out` / `media` / `README.md` / `LICENSE`；
       `scripts/package-vsix.mjs` 与 `install-local.mjs` 里的 `INCLUDE` 是硬编码的，
       新增运行期目录记得同步改这两处
+
+---
+
+## 9. Webview 的模块系统（v0.9.0 起）
+
+前端源码在 `webview/`（TypeScript），编译成**浏览器原生 ESM** 到 `media/dist/webview/`。
+没有打包器，所以有几条硬性约束：
+
+- [ ] **import 路径必须带 `.js` 后缀**（浏览器不认隐式后缀）。
+      这一条由 `tsconfig.webview.json` 里的 `module: NodeNext` +
+      `webview/package.json` 的 `"type": "module"` 强制，编译器会报错拦住。
+- [ ] **`media/markdown.js` 不要改成 ESM**：`scripts/smoke-render.mjs` 用 Node 的
+      `require()` 加载它跑 70 项断言。它是普通脚本，挂在 `window.MarkdownRenderer` 上。
+- [ ] **`acquireVsCodeApi()` 只能调用一次**：只允许在 `webview/host.ts` 里调，
+      其它模块一律用 `host.ts` 导出的 `post()`。
+- [ ] **CSP 不能只写 nonce 却去掉 `'strict-dynamic'`**（或在没有实测的情况下改动它）：
+      见 `src/webview/html.ts` 里的注释 —— 模块导入会继承入口脚本的 nonce，
+      但 `'strict-dynamic'` 把这个信任模型写成了显式的。改完必须用
+      `scripts/preview.html`（与真实 CSP 一致）实测。
+- [ ] **`media/dist/` 是产物**，已 gitignore；改代码请改 `webview/`，不要手改产物。
+
+### 前端回归可以自动化的部分
+
+`scripts/preview.html` 已经 mock 了 `acquireVsCodeApi`，并且会在收到 `ready` 后
+下发演示数据，所以可以用浏览器自动化（如 Playwright）驱动它跑关键交互：
+点悬浮条复选框 → 检查 `.turn.tile`、点卡片名退出并排 → 检查 `.tab-check` 同步、
+发消息 → 检查 `window.__sent` 里的报文。比人眼点一遍可靠得多。
+

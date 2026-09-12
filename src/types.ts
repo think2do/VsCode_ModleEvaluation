@@ -114,3 +114,81 @@ export interface SessionSummary {
 	updatedAt: number;
 	turnCount: number;
 }
+
+// #region Webview ⇄ 扩展 的消息契约
+//
+// 这是两侧**唯一**的一份协议定义：扩展侧在 `protocol.ts` 里做运行时收窄，
+// Webview 侧（`webview/`）用 `import type` 引入同一份类型。
+//
+// 放在 `types.ts` 而不是 `protocol.ts`，是因为 Webview 只需要这些**类型**。
+// `protocol.ts` 里的解析函数属于扩展侧运行时，不该被打进 Webview 的产物。
+
+/**
+ * Webview 发过来的图片负载：还没落盘，带可直接渲染的 data URL。
+ * （`WireImage` 是反方向：已落盘、扩展侧发给界面。）
+ */
+export interface IncomingImage {
+	dataUrl: string;
+	mime?: string;
+	name?: string;
+}
+
+/** 「导入到 Copilot」的范围：这一条回答 / 该模型在整个会话里的对话。 */
+export type ImportScope = 'one' | 'model';
+
+/** Webview → 扩展。 */
+export type WebviewMessage =
+	| { type: 'ready' }
+	| { type: 'send'; prompt?: string; images: IncomingImage[]; selected?: string[] }
+	| { type: 'stop' }
+	| { type: 'regenerate'; turnId?: string; key?: string }
+	| { type: 'editPrompt'; turnId?: string; prompt?: string; regenerate?: boolean }
+	| { type: 'newSession' }
+	| { type: 'selectModels'; selected: string[] }
+	| { type: 'setContext'; turnId?: string; key?: string }
+	| { type: 'clearContext' }
+	| { type: 'updateTurnView'; turnId?: string; view?: TurnView }
+	| { type: 'loadSession'; id?: string }
+	| { type: 'deleteSession'; id?: string }
+	| { type: 'requestSessions' }
+	| { type: 'openLink'; href?: string }
+	| { type: 'importToCopilot'; turnId?: string; key?: string; scope: ImportScope };
+
+export type NoticeLevel = 'info' | 'warn' | 'error';
+
+/** 扩展 → Webview。 */
+export type HostMessage =
+	| { type: 'models'; models: ModelRef[]; selected: string[]; warning: string }
+	| { type: 'session'; session: WireSession; sessions: SessionSummary[] }
+	| { type: 'sessions'; sessions: SessionSummary[] }
+	/** 新的一轮（发送后立刻推，此时各模型都还是 pending） */
+	| { type: 'turn'; turn: WireTurn }
+	/** 流式增量 */
+	| { type: 'chunk'; turnId: string; key: string; text: string }
+	/** 状态 / 耗时 / 错误等字段级更新 */
+	| { type: 'patch'; turnId: string; key: string; patch: Partial<ModelResponse> }
+	/** 清空某模型的卡片，准备重新生成 */
+	| { type: 'reset'; turnId: string; key: string }
+	/**
+	 * 编辑提问后的**轻量**回推：只刷新那一轮的提问区，不整屏重渲染
+	 * （整屏重渲染会丢掉并排对比状态）。
+	 *
+	 * ⚠️ `contextSource` 必须是 `null` 而不是 `undefined` ——
+	 * `postMessage` 会丢掉值为 `undefined` 的字段，用 `null` 才能把
+	 * 「上下文已被清除」这件事真的传过去。
+	 */
+	| {
+			type: 'prompt';
+			turnId: string;
+			prompt: string;
+			editedAt?: number;
+			title: string;
+			contextSource: ContextSource | null;
+	  }
+	/** 本轮所有请求都结束了，可以解除「发送中」 */
+	| { type: 'idle' }
+	| { type: 'notice'; level: NoticeLevel; message: string }
+	| { type: 'toggleHistory' };
+
+// #endregion
+
