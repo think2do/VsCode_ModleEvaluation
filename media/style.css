@@ -548,7 +548,7 @@ body {
 	color: var(--fg);
 }
 
-/* 轮次头：第 N 轮 · 时间 · 状态摘要 */
+/* 轮次头：第 N 轮 · 时间 */
 .q-head {
 	display: flex;
 	align-items: center;
