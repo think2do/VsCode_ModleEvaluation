@@ -248,7 +248,7 @@ npm run install:local
 
 ```mermaid
 flowchart LR
-    UI[Webview 界面<br/>悬浮对比条 + 输入框 + 回答] -->|postMessage| EXT[扩展主逻辑<br/>chatPanel.ts]
+    UI[Webview 界面<br/>悬浮对比条 + 输入框 + 回答] -->|postMessage| EXT[扩展主逻辑<br/>panel.ts]
     EXT --> LM[vscode.lm 语言模型 API]
     LM --> M1[模型 A]
     LM --> M2[模型 B]
@@ -439,12 +439,25 @@ npm run package:vsix  # 编译 + 打包 dist/*.vsix（零下载）
 
 ### 测试
 
-`npm test` 运行 `scripts/smoke-render.mjs`，直接加载 `media/markdown.js` 跑断言，重点验证：
+`npm test` 会先编译（`pretest`），再跑两个套件：
+
+**`scripts/smoke-render.mjs`** —— 直接加载 `media/markdown.js` 跑断言，重点验证：
 
 - **XSS 防护** —— 模型返回的 `<script>`、`<img onerror>`、`javascript:` 链接必须被挡住，
   在标题 / 列表 / 表格 / 引用 / 代码块等**每个位置**都测了一遍；
 - **语法正确性** —— 标题、列表（含嵌套）、表格、代码块、行内代码、链接等渲染结构；
 - **边界情况** —— 未闭合围栏、空字符串、单个反引号 / 井号 / 竖线不能抛异常。
+
+**`scripts/unit-test.mjs`** —— 加载 `out/` 下的纯逻辑模块（它们只用 `import type`
+引入 vscode，编译后不需要运行时），锁住最容易改错的业务规则：
+
+- **上下文回放**（`lm/context.ts`）—— 每个模型只回放自己答完的轮次；失败 / 取消的轮次
+  不回放；丢过图片的模型历史里不再发图；共享上下文的追加条件；
+- **模型筛选**（`lm/models.ts`）—— 白名单命中 / 落空退回全部 / 大小写不敏感；
+  「隐藏即不可选」与勾选上限截断；
+- **协议收窄**（`protocol.ts`）—— 认得出每一类消息，认不出的直接忽略；
+  `send.selected` 缺省时保留 `undefined`（表示回落到会话勾选，而不是「一个都没勾」）；
+- **导入规划**（`session/import.ts`）—— 单条 / 整段两种范围的内容与文件名。
 
 ### 界面预览（不用启动 VS Code）
 
@@ -460,20 +473,36 @@ open scripts/preview.html          # macOS
 ```
 ├── src/
 │   ├── extension.ts      # 入口：注册命令、监听模型与设置变化
-│   ├── chatPanel.ts      # 核心：模型发现、并发流式请求、会话编排、Webview HTML
+│   ├── panel.ts          # 面板：消息路由 + 会话编排（把下面各层粘起来）
+│   ├── protocol.ts       # Webview ⇄ 扩展 的消息契约（两侧共享的唯一一份定义）
 │   ├── store.ts          # 会话 / 图片的本地持久化（原子写入 + 孤儿清理）
-│   └── types.ts          # 共享类型
+│   ├── types.ts          # 共享类型
+│   ├── lm/               # 语言模型这一侧
+│   │   ├── discovery.ts  #   拉取模型清单 → 按设置筛选 → 收敛勾选
+│   │   ├── models.ts     #   模型标识、图片能力探测、白名单过滤、勾选收敛
+│   │   ├── context.ts    #   上下文回放规则（每个模型只回放自己答完的轮次）
+│   │   ├── request.ts    #   流式请求 + 图片降级重试
+│   │   └── errors.ts     #   错误码中文化 / 区分「取消」与「失败」
+│   ├── session/          # 会话这一侧
+│   │   ├── session.ts    #   会话纯数据操作（新建 / 找轮次 / 重置应答）
+│   │   ├── import.ts     #   「导入到 Copilot」内容规划（纯函数，可单测）
+│   │   └── importWriter.ts #  写盘 + 打开 + 失败兜底
+│   └── webview/
+│       ├── html.ts       #   Webview HTML 外壳与 CSP
+│       └── wire.ts       #   落盘结构 → 界面结构（图片补 data URL + 缓存）
 ├── media/
 │   ├── markdown.js       # Markdown 渲染器（零依赖，可单独测试）
 │   ├── main.js           # Webview 前端逻辑（渲染、选项卡/悬浮条、图片、历史、拖拽）
 │   └── style.css         # 界面样式（跟随 VS Code 主题变量）
 ├── scripts/
-│   ├── smoke-render.mjs  # 离线冒烟测试（npm test）
+│   ├── smoke-render.mjs  # Markdown 渲染的离线冒烟测试
+│   ├── unit-test.mjs     # 纯逻辑单元测试（上下文回放 / 模型筛选 / 协议收窄）
 │   ├── install-local.mjs # 本地安装 / 卸载到 ~/.vscode/extensions
 │   ├── package-vsix.mjs  # 手工打包 .vsix（零依赖，不用 vsce）
 │   └── preview.html      # 开发用界面预览页（浏览器里直接看 UI）
 ├── docs/
 │   ├── design/           # 界面方案 Demo（当初选方案用的静态网页，共享 shared.css）
+│   ├── refactor-checklist.md  # 改 UI 时的回归清单（动手前先读）
 │   ├── 多模型对比对话插件需求文档.md
 │   └── 给朋友的安装说明.md    # 打包时复制到 dist/，随 vsix 一起发
 ├── dist/                 # 打包产物（npm run package:vsix，已 gitignore）
