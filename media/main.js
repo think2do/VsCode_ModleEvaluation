@@ -586,11 +586,8 @@
 		const time = document.createElement('span');
 		time.className = 'q-time';
 		time.textContent = formatTime(turn.at);
-		const summary = document.createElement('span');
-		summary.className = 'q-summary';
 		head.appendChild(badge);
 		head.appendChild(time);
-		head.appendChild(summary);
 		section.appendChild(head);
 
 		// ── 用户提问：聚焦阅读下是一块带底色的「提问」区，平铺模式下是一个气泡
@@ -652,9 +649,8 @@
 		}
 		section.appendChild(cards);
 
-		state.turnEls.set(turn.id, { section, summary, missing, tabbar, cards });
+		state.turnEls.set(turn.id, { section, missing, tabbar, cards });
 		el.messages.appendChild(section);
-		updateTurnSummary(turn.id);
 
 		if (doScroll !== false) {
 			scrollToBottom();
@@ -696,36 +692,6 @@
 		entry.tm.textContent = statusBrief(res || { status });
 	}
 
-	/** 这一轮的概况：几个模型、各自什么状态。 */
-	function updateTurnSummary(turnId) {
-		const info = state.turnEls.get(turnId);
-		const turn = turnById(turnId);
-		if (!info || !turn) {
-			return;
-		}
-		const responses = Object.values(turn.responses || {});
-		if (responses.length === 0) {
-			info.summary.textContent = '本轮没有可用的模型';
-			return;
-		}
-		const count = (status) => responses.filter((r) => r.status === status).length;
-		const parts = [];
-		if (count('done')) {
-			parts.push(count('done') + ' 成功');
-		}
-		if (count('streaming') + count('pending')) {
-			parts.push(count('streaming') + count('pending') + ' 进行中');
-		}
-		if (count('error')) {
-			parts.push(count('error') + ' 失败');
-		}
-		if (count('cancelled')) {
-			parts.push(count('cancelled') + ' 已取消');
-		}
-		info.summary.textContent = responses.length + ' 个模型 · ' + parts.join(' / ');
-	}
-
-
 	function createCard(turnId, key, response) {
 		const model = state.models.find((m) => m.key === key);
 
@@ -733,7 +699,6 @@
 		card.className = 'card';
 		card.style.setProperty('--c', modelColorVar(key));
 
-		// ── 标题栏：状态点 + 模型名 + 状态 + 操作按钮
 		const head = document.createElement('div');
 		head.className = 'card-head';
 
@@ -744,7 +709,6 @@
 		name.className = 'card-name';
 		name.textContent = model ? modelLabel(model) : key;
 		name.title = key;
-		// 并排对比时点模型名 = 退出并排，只读这一个
 		name.addEventListener('click', () => setFocus(key));
 
 		const copy = document.createElement('button');
@@ -793,7 +757,6 @@
 		head.appendChild(actions);
 		card.appendChild(head);
 
-		// ── 正文
 		const body = document.createElement('div');
 		body.className = 'card-body';
 		card.appendChild(body);
@@ -829,9 +792,6 @@
 	function updateStatus(entry) {
 		const res = entry.res;
 		const parts = [STATUS_TEXT[res.status] || res.status];
-		if (typeof res.elapsedMs === 'number' && res.status !== 'streaming' && res.status !== 'pending') {
-			parts.push((res.elapsedMs / 1000).toFixed(1) + 's');
-		}
 		entry.status.textContent = parts.join(' · ');
 		entry.status.className = 'card-status s-' + res.status;
 		entry.card.dataset.status = res.status;
@@ -842,7 +802,6 @@
 		if (tab) {
 			updateTab(tab, res);
 		}
-		updateTurnSummary(entry.turnId);
 		const last = latestTurn();
 		if (last && last.id === entry.turnId) {
 			refreshMini(entry.key);

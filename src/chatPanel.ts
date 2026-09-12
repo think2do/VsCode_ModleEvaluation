@@ -206,13 +206,6 @@ export class MultiModelChatPanel {
 			const kept = refs.filter((ref) => wanted.has(ref.vendor.toLowerCase()));
 			if (kept.length > 0) {
 				visible = kept;
-				if (kept.length < refs.length) {
-					notes.push(
-						`只显示你自己添加的 ${kept.length} 个模型（vendor: ${vendors.join('、')}），` +
-							`另有 ${refs.length - kept.length} 个模型已隐藏。` +
-							'想连它们一起看，把设置 multiModelCompare.onlyPreferredVendors 关掉。',
-					);
-				}
 			} else {
 				notes.push(
 					`设置 multiModelCompare.preferredVendors（${vendors.join('、')}）没有匹配到任何模型，` +

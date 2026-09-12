@@ -370,7 +370,6 @@ body.resizing * {
 	border-bottom: 1px solid var(--line);
 	background: color-mix(in srgb, var(--bg) 88%, transparent);
 	backdrop-filter: blur(8px);
-	box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
 }
 
 /* 迷你卡横向排开，太窄时横向滚动 */
@@ -406,18 +405,6 @@ body.resizing * {
 	transition: background 0.12s, border-color 0.12s;
 }
 
-/* 左边缘的模型识别色 */
-.mini::before {
-	content: '';
-	position: absolute;
-	top: 0;
-	bottom: 0;
-	left: 0;
-	width: 2px;
-	background: var(--c, var(--accent));
-	opacity: 0.55;
-}
-
 /* 点这里 = 聚焦阅读该模型 */
 .mini-body {
 	flex: 1 1 auto;
@@ -432,11 +419,6 @@ body.resizing * {
 .mini.active {
 	border-color: color-mix(in srgb, var(--c, var(--accent)) 55%, transparent);
 	background: var(--bg-3);
-}
-
-.mini.active::before {
-	opacity: 1;
-	width: 3px;
 }
 
 /* 开关关掉的模型：内容变淡，但开关本身保持清晰，仍然点得开看回答 */
@@ -973,7 +955,6 @@ body.resizing * {
 }
 
 .turn + .turn {
-	border-top: 1px dashed var(--line-2);
 	padding-top: 22px;
 }
 
