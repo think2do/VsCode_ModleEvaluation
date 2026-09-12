@@ -29,6 +29,9 @@
 
 	--radius: 8px;
 	--radius-lg: 12px;
+
+	/* 单模型阅读时正文的最大宽度。并排对比时会解除这个限制（见 .turn.tile）。 */
+	--read-width: 880px;
 }
 
 * {
@@ -80,16 +83,6 @@ body {
 
 ::-webkit-scrollbar-corner {
 	background: transparent;
-}
-
-/* 拖拽调整宽度时，全局禁止选中文本 */
-body.resizing {
-	cursor: col-resize;
-	user-select: none;
-}
-
-body.resizing * {
-	user-select: none !important;
 }
 
 #app {
@@ -236,11 +229,11 @@ body.resizing * {
 .messages {
 	flex: 1 1 auto;
 	overflow-y: auto;
-	padding: 14px;
 	min-width: 0;
 	/* 让每一轮的 offsetTop 相对消息区计算 */
 	position: relative;
 	scroll-padding-top: 12px;
+	padding: 20px 22px 48px;
 }
 
 /* 历史会话侧栏：位于右侧 */
@@ -555,10 +548,6 @@ body.resizing * {
 	color: var(--fg);
 }
 
-.turn {
-	margin-bottom: 22px;
-}
-
 /* 轮次头：第 N 轮 · 时间 · 状态摘要 */
 .q-head {
 	display: flex;
@@ -581,12 +570,6 @@ body.resizing * {
 
 .q-time {
 	font-variant-numeric: tabular-nums;
-	white-space: nowrap;
-}
-
-.q-summary {
-	overflow: hidden;
-	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
@@ -728,7 +711,7 @@ body.resizing * {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	max-width: 880px;
+	max-width: var(--read-width);
 	margin: 0 auto 10px;
 	font-size: 0.76em;
 	font-weight: 600;
@@ -798,16 +781,6 @@ body.resizing * {
 	background: var(--bg-2);
 	color: var(--fg);
 	box-shadow: inset 0 -2px 0 0 var(--c, var(--accent));
-}
-
-/* 该模型的结果在「显示结果」里被隐藏：选项卡变淡，但仍可点开阅读 */
-.tab.muted {
-	opacity: 0.45;
-}
-
-.tab.muted:hover,
-.tab.muted.on {
-	opacity: 1;
 }
 
 .tab-check {
@@ -890,7 +863,7 @@ body.resizing * {
 	position: relative;
 	min-width: 0;
 	width: auto;
-	max-width: 880px;
+	max-width: var(--read-width);
 	margin: 0 auto;
 	border: none;
 	background: transparent;
@@ -907,9 +880,13 @@ body.resizing * {
 	align-items: center;
 	flex-wrap: wrap;
 	gap: 4px 6px;
-	padding: 6px 9px;
+	/* 单读模式下的卡头 = 小节头：模型色竖条 + 名称 + 状态 + 操作。
+	   并排模式会覆盖成带底色的卡片标题栏（见 .cards.tile .card-head）。 */
+	padding: 0 0 9px;
+	margin-bottom: 12px;
 	border-bottom: 1px solid var(--line);
-	background: var(--vscode-sideBarSectionHeader-background, rgba(128, 128, 128, 0.08));
+	background: transparent;
+	font-size: 0.9em;
 }
 
 .card-name {
@@ -987,15 +964,7 @@ body.resizing * {
 	color: var(--run);
 }
 
-/* 卡片标题栏 = 小节头：模型色竖条 + 名称 + 状态 + 操作 */
-.card-head {
-	background: transparent;
-	border-bottom: 1px solid var(--line);
-	padding: 0 0 9px;
-	margin-bottom: 12px;
-	font-size: 0.9em;
-}
-
+/* 单读模式下卡头左侧的模型色竖条（并排模式会把它收掉，见 .cards.tile .card-head） */
 .card-head::before {
 	content: '';
 	width: 3px;
@@ -1019,24 +988,19 @@ body.resizing * {
 	white-space: normal;
 }
 
-/* 正文按阅读宽度排版，段落之间留出呼吸感 */
-.card-body.md p {
-	margin-bottom: 0.75em;
-}
-
+/*
+ * 单读模式下的阅读栏宽度。
+ *
+ * `.turn` 不放在这一组里：它需要的是 `margin: 0 auto 26px`（26px 是轮次间距），
+ * 而不是这一组的 `margin-left/right: auto`，放一起就得再被后面的规则覆盖一遍。
+ */
 .q-row,
 .tabbar,
 .cards,
-.answers-label,
-.turn {
-	max-width: 880px;
+.answers-label {
+	max-width: var(--read-width);
 	margin-left: auto;
 	margin-right: auto;
-}
-
-/* 多轮之间用虚线分隔，像文章分节 */
-.messages {
-	padding: 20px 22px 48px;
 }
 
 /* 悬浮条出现时，顶部多留出它的高度，免得遮住第一轮的内容 */
@@ -1045,6 +1009,7 @@ body.resizing * {
 }
 
 .turn {
+	max-width: var(--read-width);
 	margin: 0 auto 26px;
 }
 
@@ -1069,11 +1034,14 @@ body.resizing * {
  * 每格高度一致（内容超出时格内纵向滚动），这样各格顶部对齐、便于逐条对比。
  */
 
-/* 并排时对话区用满宽度，不再受 880px 阅读栏限制。
+/* 并排时对话区用满宽度，不再受 --read-width 阅读栏限制。
  *
  * 注意是**按轮**生效：进入并排时 `applyVisibility()` 会给那一轮加 `.tile`，
  * 而不是给整个 #app 加类 —— 各轮的展示设置本来就是互相独立的，某一轮在
- * 并排阅读时，不想连带把其它单读轮次的阅读宽度也改掉。 */
+ * 并排阅读时，不想连带把其它单读轮次的阅读宽度也改掉。
+ *
+ * `.answers-label` 虽然在该模式下被隐藏，但这里一并列出，保证「并排时这一轮
+ * 的所有直接子块都解除宽度限制」这条规则是完整的。 */
 .turn.tile,
 .turn.tile .q-row,
 .turn.tile .tabbar,
@@ -1140,7 +1108,10 @@ body.resizing * {
 	display: none;
 }
 
-/* 并排时单模型那套「模型回答」小标题会重复，收掉 */
+/* 并排时单模型那套「模型回答」小标题会重复，收掉。
+ * 注意：
+ * - **选项卡不收**：并排时它仍然显示，点它能退出并排、单读那个模型；
+ * - max-width 也在上面的 `.turn.tile` 组里被解除了，此处仅负责隐藏。 */
 .turn.tile .answers-label {
 	display: none;
 }

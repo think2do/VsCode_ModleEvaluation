@@ -163,3 +163,24 @@ python3 -m http.server 8000     # 在仓库根目录
 点悬浮条复选框 → 检查 `.turn.tile`、点卡片名退出并排 → 检查 `.tab-check` 同步、
 发消息 → 检查 `window.__sent` 里的报文。比人眼点一遍可靠得多。
 
+### 纯 CSS 重构：用 computed style 全量对比验证等价
+
+改样式但又不想改观感时，别靠肉眼看——把旧版 CSS 也加载起来，逐元素逐属性比对：
+
+```bash
+git show HEAD:media/style.css > scripts/_old-style.css
+sed 's|\.\./media/style\.css|_old-style.css|' scripts/preview.html > scripts/_cmp-old.html
+python3 -m http.server 8000
+```
+
+然后用浏览器自动化在**两个页面**上遍历 DOM（`#app` 下每个元素，键写成 tag + 索引路径），
+对每个元素取一组 computed style（宽度 / 内外边距 / display / 颜色 / 字号 / flex / gap 等），
+两边做 diff。**单读模式与并排模式都要跑** —— 并排模式覆盖了一大批 `.turn.tile` 下的覆盖规则。
+
+这一招能抳到肉眼看不出来的回归。实际就靠它抳出过一个自作主张的改动：
+把 `.turn.tile .tabbar` 也设成了 `display: none`（原行为是只隐藏 `.answers-label`，
+选项卡要留着让人能退出并排）。
+
+> 如果 diff 出现极小的颜色差（如 `oklab(...)` 小数点后几位），先怀疑采样时机：
+> 带 `transition` 的属性在点击后可能还在过渡中，加个 `waitForTimeout` 再取。
+
