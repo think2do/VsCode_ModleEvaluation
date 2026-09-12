@@ -64,7 +64,8 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "node scripts/smoke-render.mjs",
+    "pretest": "npm run compile",
+    "test": "node scripts/smoke-render.mjs && node scripts/unit-test.mjs",
     "install:local": "npm run compile && node scripts/install-local.mjs",
     "uninstall:local": "node scripts/install-local.mjs --uninstall",
     "package:vsix": "npm run compile && node scripts/package-vsix.mjs"

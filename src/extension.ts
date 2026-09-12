@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { MultiModelChatPanel } from './chatPanel';
+import { MultiModelChatPanel } from './panel';
 import { SessionStore } from './store';
 
 export function activate(context: vscode.ExtensionContext): void {

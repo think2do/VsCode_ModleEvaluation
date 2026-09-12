@@ -51,6 +51,18 @@ export interface ModelResponse {
 	droppedImages?: boolean;
 }
 
+/**
+ * 某一轮独立的展示设置。
+ *
+ * 这是「展示状态」的**唯一真相源**：`focusKey`（单读看哪个模型）与
+ * `compareKeys`（并排对比哪几个）都只认这里，不存在第二份全局状态。
+ * 缺省时由前端按上一轮的设置推导（新的一轮继承你上一轮的看法）。
+ */
+export interface TurnView {
+	focusKey?: string;
+	compareKeys?: string[];
+}
+
 /** 一轮对话：一条用户提问 + 各模型各自的回答。 */
 export interface Turn {
 	id: string;
@@ -61,14 +73,22 @@ export interface Turn {
 	editedAt?: number;
 	images: ImageAttachment[];
 	/** 该轮独立的展示设置；缺省时由前端按上一轮或当前模型推导 */
-	view?: {
-		focusKey?: string;
-		compareKeys?: string[];
-	};
+	view?: TurnView;
 	responses: Record<string, ModelResponse>;
 }
 
 export type WireTurn = Omit<Turn, 'images'> & { images: WireImage[] };
+
+/**
+ * 后续所有模型共享的单条回答来源。
+ *
+ * 用户可以把某条已完成的回答「设为上下文」，之后每次提问都会把它当
+ * 助手侧的系统提示一起发过去。
+ */
+export interface ContextSource {
+	turnId: string;
+	modelKey: string;
+}
 
 /** 一次完整会话。 */
 export interface Session {
@@ -80,10 +100,7 @@ export interface Session {
 	/** 上次勾选的模型 key 列表 */
 	selectedModels: string[];
 	/** 后续所有模型共享的单条回答来源 */
-	contextSource?: {
-		turnId: string;
-		modelKey: string;
-	};
+	contextSource?: ContextSource;
 	turns: Turn[];
 }
 
