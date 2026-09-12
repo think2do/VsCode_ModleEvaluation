@@ -4,7 +4,7 @@
 > 支持多轮追问、图片输入与本地历史。
 
 ![VS Code](https://img.shields.io/badge/VS%20Code-%E2%89%A5%201.137.0-007ACC?logo=visualstudiocode&logoColor=white)
-![Version](https://img.shields.io/badge/version-0.8.0-2ea44f)
+![Version](https://img.shields.io/badge/version-0.9.0-2ea44f)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Runtime dependencies](https://img.shields.io/badge/runtime%20dependencies-0-brightgreen)
 
@@ -17,7 +17,7 @@
 - **不碰你的密钥** —— 复用你本机已配置好的模型（Copilot 订阅或自定义端点），扩展**不接触任何 API Key**；
 - **数据留在本地** —— 会话与图片都存在 VS Code `globalStorage` 里，不上传、不同步。
 
-当前版本 **`v0.8.0`** ｜ 需求文档：[`docs/多模型对比对话插件需求文档.md`](docs/多模型对比对话插件需求文档.md)
+当前版本 **`v0.9.0`** ｜ 需求文档：[`docs/多模型对比对话插件需求文档.md`](docs/多模型对比对话插件需求文档.md)
 
 ---
 
@@ -332,8 +332,8 @@ sequenceDiagram
 npm run install:local
 ```
 
-先编译，再把运行期需要的文件（`package.json` / `out` / `media` / `README.md` / `LICENSE`，约 **450 KB**，
-其中约一半是 sourcemap）
+先编译，再把运行期需要的文件（`package.json` / `out` / `media` / `README.md` / `LICENSE`，约 **456 KB**，
+其中约 160 KB 是 sourcemap）
 复制到 `~/.vscode/extensions/local.multi-model-compare-<version>/`。**无需下载任何东西。**
 
 **装完之后必须完全退出并重启 VS Code**（`Cmd+Q` 再打开），扩展才会被加载。
@@ -380,7 +380,7 @@ npm run package:vsix
 
 | 文件 | 用途 |
 |------|------|
-| `multi-model-compare-<version>.vsix` | 扩展安装包（约 **118 KB**），发给对方 |
+| `multi-model-compare-<version>.vsix` | 扩展安装包（约 **120 KB**），发给对方 |
 | `安装说明（先看这个）.md` | 面向非技术用户的图文说明，一起发 |
 
 对方拿到后，任选一种安装：
@@ -392,6 +392,10 @@ npm run package:vsix
 > **打包是零下载的**：`scripts/package-vsix.mjs` 直接手工构造 vsix
 > （本质是个特定结构的 zip：`[Content_Types].xml` + `extension.vsixmanifest` + `extension/`）。
 > 因此**不需要** `npx @vscode/vsce`（那个会下载几十 MB 的 npm 依赖），也不需要联网。
+>
+> 进包的文件走**白名单**（`package.json` / `out` / `media` / `README.md` / `LICENSE`），
+> 所以源码、`docs/`、`scripts/` 本来就不会进去 —— 也就不需要 `.vscodeignore`
+> （旧版曾有一个，但它从未被任何脚本读取，v0.9.0 已删除）。
 
 #### ⚠️ 发给别人前要知道的两件事
 
@@ -561,7 +565,6 @@ python3 -m http.server 8000
 ├── .vscode/              # F5 调试配置（launch.json）与 compile / watch 任务（tasks.json）
 ├── .multi-model-context/ # 运行时生成：「导入到 Copilot」写出的上下文文件（已 gitignore，可删）
 ├── .gitignore
-├── .vscodeignore         # 打包 vsix 时排除的文件
 ├── LICENSE               # MIT
 ├── package.json          # 扩展清单（命令、设置、engines）
 ├── tsconfig.json         # 解决方案配置：串起下面两个子项目（tsc -b）
@@ -635,7 +638,50 @@ python3 -m http.server 8000
 
 ## 版本历史
 
-### v0.8.0（当前）
+### v0.9.0（当前）· 框架重构
+
+这一版**不动功能**，把项目从「一次次数着改」变成能持续维护的结构，顺带修掉一个
+此前记录在案、暂缓处理的显示 bug。
+
+**修复**
+
+- **悬浮条上的两个控件之前是失效的**（v0.6.0 引入）：
+  - 勾选左侧复选框只会打上钩，**不会真的进入并排布局**；
+  - 点悬浮条上的模型名只移动高亮，**不切换显示的模型**。
+
+  根因是同一种「看法」被存了两份 —— 悬浮条改的是全局状态，而渲染读的是**每轮**
+  的展示设置，两份状态各被读一半。现已统一为每轮一份，两种交互都恢复正常。
+- 连带修掉：退出并排后选项卡上的勾选没同步，导致同一个复选框要**点两下**才有反应。
+
+**架构**
+
+| | 之前 | 现在 |
+|---|---|---|
+| 扩展主逻辑 | `chatPanel.ts` **987 行**单类，模型发现 / 并发流式 / 会话编排 / HTML 模板混在一起 | `panel.ts` **582 行**只做消息路由与会话编排，其余拆成 12 个模块（`lm/` `session/` `webview/`） |
+| Webview 前端 | `media/main.js` **1545 行**单个 IIFE，无类型检查 | `webview/` 下 12 个 TypeScript 模块（`strict`） |
+| 消息协议 | 两侧各自手写字段断言（11 处 `as unknown as {…}`） | 一份共享的判别联合类型，`switch` 自动收窄 |
+| 测试 | 70 项（只覆盖 Markdown 渲染器） | **122 项**（新增上下文回放 / 模型筛选 / 协议收窄 / 导入规划） |
+| 样式 | 11 个选择器被重复定义、3 处已失效的死规则 | 死规则清零，重复只剩正当的共享写法 |
+
+**开发方式的变化**（读代码 / 改代码前请留意）
+
+- 前端源码移到了 **`webview/`（TypeScript）**，产物在 `media/dist/`（已 gitignore）。
+  以前是直接改 `media/main.js`，现在改 `webview/*.ts`。
+- `npm run compile` 现在是 **`tsc -b`**，一条命令同时编「扩展侧 → `out/`」与
+  「Webview 侧 → `media/dist/`」（配置见 `tsconfig.json` 的 project references）。
+- **`scripts/preview.html` 必须用本地 HTTP 服务打开**（`python3 -m http.server`），
+  不能再像以前那样双击 —— 前端改成原生 ESM 后，`file://` 会被浏览器的 CORS 拦掉。
+  它现在使用与真实 Webview **一致**的 CSP，改 CSP 时可以拿它验证。
+- 新增回归清单 [`docs/refactor-checklist.md`](docs/refactor-checklist.md)：改 UI 前先读，
+  里面是历次踩过的坑与「哪些 UI 细节必须保留」。
+
+**其它**
+
+- 打包体积因引入 sourcemap 变大：`.vsix` 约 47 KB → **120 KB**；本地安装目录约 **456 KB**
+  （其中约 160 KB 是 sourcemap）。sourcemap 方便排障，不需要的话删掉 `*.js.map` 即可。
+- 删掉了从未生效的 `.vscodeignore`（打包走白名单，不读它）。
+
+### v0.8.0
 
 - **提问可编辑**：最新一轮的提问右上角多了「编辑」，可就地改文字，
   并选择「**仅保存**」或「**保存并重新生成**」（`Cmd` / `Ctrl` + 回车）。
@@ -779,7 +825,8 @@ python3 -m http.server 8000
 
 欢迎提 Issue 与 PR。动手前建议先了解几条硬约束：
 
-- **零依赖 / 零构建**：不引入运行时 npm 包，前端保持原生 JS/CSS，打包脚本也不依赖 `vsce`。
+- **零依赖 / 零打包器**：不引入运行时 npm 包；前端是 TypeScript，但只用 `tsc` 编译成
+  **浏览器原生 ESM**，没有 webpack / vite 之类的打包步骤；打包脚本也不依赖 `vsce`。
   若改动确实需要新增依赖，请先开 Issue 讨论。
 - **中文注释与中文 UI 文案**：这是当前统一风格，新增代码请保持一致。
 - 改 UI 前请对照 [使用说明](#使用说明) 与 [已知限制与设计取舍](#已知限制与设计取舍) 里的交互约定，

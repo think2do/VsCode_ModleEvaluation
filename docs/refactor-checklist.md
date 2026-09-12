@@ -135,6 +135,8 @@ python3 -m http.server 8000     # 在仓库根目录
 - [ ] 打包只含 `package.json` / `out` / `media` / `README.md` / `LICENSE`；
       `scripts/package-vsix.mjs` 与 `install-local.mjs` 里的 `INCLUDE` 是硬编码的，
       新增运行期目录记得同步改这两处
+- [ ] **不要重新引入 `.vscodeignore`**：打包走的是白名单（上面那条），没有任何脚本
+      读它。v0.9.0 之前它一直是一份「写着却从不生效」的死配置，容易误导人
 
 ---
 
